@@ -1,0 +1,19 @@
+{
+  "name": "okonomiyaki",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "お好み焼き、ひっくり返せ！：生地を注いで広げ、焼き色を見極めて、フリックでお好み焼きをひっくり返す3Dミニゲーム",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node tests/logic.test.js",
+    "check": "node diag/check.js \"$PWD/dist/okonomiyaki/index.html\"",
+    "ogp": "node tools/ogp/make-ogp.mjs",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1",
+    "three": "0.187.0",
+    "wrangler": "^4.166.0"
+  }
+}

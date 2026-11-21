@@ -1,0 +1,1474 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>お好み焼き、ひっくり返せ！</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="description" content="生地を注いで広げ、焼き色を見極めて、フリックでお好み焼きをひっくり返す3Dミニゲーム。">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="お好み焼き、ひっくり返せ！">
+<meta property="og:title" content="お好み焼き、ひっくり返せ！">
+<meta property="og:description" content="生地を注いで広げ、焼き色を見極めて、フリックでお好み焼きをひっくり返す3Dミニゲーム。">
+<meta property="og:url" content="https://game.chozo.net/okonomiyaki/">
+<meta property="og:image" content="https://game.chozo.net/okonomiyaki/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="宙を舞う豚バラのお好み焼きと、タイトル「お好み焼き、ひっくり返せ！」">
+<meta property="og:locale" content="ja_JP">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root { --ink:#2a160b; --cream:#fff4dc; --sauce:#5a2a12; --accent:#e8542b; --green:#4f8f33; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:#140b06; overflow:hidden; touch-action:none;
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Yu Gothic", Meiryo, sans-serif; }
+  #app { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); overflow:hidden; background:#22140c; user-select:none; -webkit-user-select:none; }
+  #stage, #fx { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #fx { pointer-events:none; }
+  #ui { position:absolute; inset:0; pointer-events:none; color:var(--cream); }
+  #ui button { pointer-events:auto; font-family:inherit; cursor:pointer; }
+  .panel { position:absolute; left:0; right:0; display:none; }
+  .show { display:block; }
+  #hud { top:0; padding:3% calc(var(--u)*11) 0; display:block; text-align:center; } /* 左右は消音ボタンの分あける */
+  #hud h1 { margin:0; font-size:calc(var(--u)*5.8); letter-spacing:0; line-height:1.15; white-space:nowrap; font-weight:900; color:#ffd9a0;
+    text-shadow:0 3px 0 #6b2c0e, 0 6px 14px rgba(0,0,0,.6); }
+  #phase { margin-top:.6%; font-size:calc(var(--u)*4.6); line-height:1.3; opacity:.92; min-height:1.4em; text-shadow:0 2px 6px #000; }
+  /* 生地を落として広げる */
+  #pour { top:0; bottom:0; }
+  .meter { position:absolute; left:3%; right:3%; top:14%; padding:calc(var(--u)*2) calc(var(--u)*3) calc(var(--u)*2.4); border-radius:calc(var(--u)*3.4);
+    background:rgba(20,10,4,.62); box-shadow:0 6px 18px rgba(0,0,0,.4); backdrop-filter:blur(2px); }
+  .mrow { display:flex; justify-content:space-around; align-items:flex-end; }
+  .mv { text-align:center; line-height:1; }
+  .mv small { display:block; font-size:calc(var(--u)*4.3); opacity:.8; margin-bottom:calc(var(--u)*1); }
+  .mv b { font-size:calc(var(--u)*14.5); font-weight:900; color:#ffe2a8; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .mv i { font-style:normal; font-size:calc(var(--u)*5.6); margin-left:.15em; opacity:.85; }
+  .msub { text-align:center; font-size:calc(var(--u)*4.4); margin-top:calc(var(--u)*1.4); opacity:.95; }
+  .msub b { font-variant-numeric:tabular-nums; color:#fff; }
+  .msub .mul { color:#ff9d6e; font-weight:900; }
+  .tbar { position:relative; height:calc(var(--u)*2.4); margin:calc(var(--u)*5.6) 0 calc(var(--u)*9.4); border-radius:99px;
+    background:linear-gradient(90deg,#f5e3b0,#e9b265 45%,#b8622a); box-shadow:inset 0 1px 3px rgba(0,0,0,.5); }
+  .tbar #tMark { position:absolute; top:-45%; width:calc(var(--u)*1.4); height:190%; margin-left:calc(var(--u)*-.7); background:#fff; border-radius:3px; box-shadow:0 0 0 2px #2a160b; left:0; transition:left .08s linear; }
+  .tbar span { position:absolute; top:calc(100% + var(--u)*1.4); font-size:calc(var(--u)*3.6); line-height:1.2; opacity:.85; white-space:nowrap; }
+  .tbar .l { left:0; } .tbar .r { right:0; text-align:right; }
+  .tbar em { position:absolute; bottom:calc(100% + var(--u)*1.1); font-style:normal; font-size:calc(var(--u)*3.4); line-height:1; opacity:.8; transform:translateX(-50%); }
+  .pctl { position:absolute; left:0; right:0; bottom:3.5%; padding:0 4%; text-align:center; }
+  #pourHint { min-height:2.7em; line-height:1.35; display:flex; align-items:flex-end; justify-content:center; }
+  .prow { display:flex; gap:2.5%; align-items:stretch; }
+  #pourBtn { flex:1.3; border:none; border-radius:calc(var(--u)*4); font-size:calc(var(--u)*6); font-weight:900; color:var(--ink); line-height:1.2;
+    background:linear-gradient(#fff8ea,#f0d6a6); box-shadow:0 6px 0 #8a4a1d, 0 10px 18px rgba(0,0,0,.45); padding:calc(var(--u)*2.8) 0; touch-action:none; }
+  #pourBtn small { display:block; font-size:calc(var(--u)*3.7); margin-top:.15em; white-space:nowrap; font-weight:600; opacity:.8; }
+  #pourBtn.on { transform:translateY(4px); box-shadow:0 2px 0 #8a4a1d; background:linear-gradient(#ffe2a6,#f3c16a); }
+  #cookBtn { flex:1; padding:calc(var(--u)*2.6) 0; font-size:calc(var(--u)*8.2); letter-spacing:.04em; white-space:nowrap; }
+  #cookBtn:disabled { filter:grayscale(.85) brightness(.7); }
+  /* 焼き中 */
+  #cook { bottom:5%; text-align:center; }
+  .big { border:none; border-radius:999px; padding:calc(var(--u)*3.4) calc(var(--u)*12); font-size:calc(var(--u)*9.4); line-height:1.15; white-space:nowrap; font-weight:900;
+    color:#fff; background:linear-gradient(#ff7a45,#d43d17); box-shadow:0 7px 0 #7c1f08, 0 12px 20px rgba(0,0,0,.5); letter-spacing:.08em; }
+  .big:active { transform:translateY(5px); box-shadow:0 2px 0 #7c1f08; }
+  .hint { font-size:calc(var(--u)*4.1); line-height:1.35; margin-bottom:3.5%; text-shadow:0 2px 6px #000; opacity:.95; }
+  /* フリック */
+  #flip { top:0; bottom:0; }
+  #flip .guide { position:absolute; left:0; right:0; top:20%; padding:0 5%; text-align:center; font-size:calc(var(--u)*7); line-height:1.2; font-weight:900; color:#fff; text-shadow:0 3px 0 #7c1f08, 0 0 18px rgba(0,0,0,.8); }
+  #flip .sub { display:block; font-size:calc(var(--u)*4.3); font-weight:600; line-height:1.4; margin-top:2.5%; }
+  #flip .arrow { position:absolute; left:38%; bottom:20%; width:calc(var(--u)*14); height:calc(var(--u)*30); transform-origin:50% 100%; transform:rotate(24deg); animation:swipe 1.3s ease-in infinite; }
+  @keyframes swipe { 0% { opacity:0; translate:0 30%; } 25% { opacity:1; } 80% { opacity:.9; translate:0 -25%; } 100% { opacity:0; translate:0 -35%; } }
+  /* 結果 */
+  #result { bottom:2.5%; padding:0 3.5%; }
+  .sheet { background:rgba(255,246,228,.96); color:var(--ink); border-radius:calc(var(--u)*4); padding:calc(var(--u)*3.6) calc(var(--u)*3.2); box-shadow:0 12px 30px rgba(0,0,0,.55); }
+  #rTitle { font-size:calc(var(--u)*12.5); font-weight:900; text-align:center; line-height:1.1; }
+  #rWhy { text-align:center; font-size:calc(var(--u)*4.5); font-weight:700; line-height:1.4; margin:2% 0 3.5%; }
+  .rrow { display:flex; gap:3%; align-items:center; }
+  #rChart { width:42%; flex:none; aspect-ratio:1.15; background:#fff; border-radius:calc(var(--u)*2); }
+  #rScore { flex:1; min-width:0; text-align:center; font-size:calc(var(--u)*4.1); line-height:1.4; }
+  #rStats { font-size:calc(var(--u)*4.3); line-height:1.5; margin-top:calc(var(--u)*2.2); text-align:center; }
+  #rStats b, #rScore b { font-variant-numeric:tabular-nums; }
+  #ui .nw { white-space:nowrap; }
+  #rScore .sc { font-size:calc(var(--u)*13); font-weight:900; color:var(--accent); line-height:1.1; }
+  .rbtns { display:flex; justify-content:center; align-items:center; gap:calc(var(--u)*3); margin-top:4%; }
+  #rBtn { display:block; font-size:calc(var(--u)*7); padding:calc(var(--u)*2.8) calc(var(--u)*9); }
+  /* 大失敗の結果：ぶちまけた具材（いちばんおもしろい所）が見えるよう、シートを小さく下に寄せる */
+  #result.compact { bottom:1.8%; }
+  #result.compact .sheet { padding:calc(var(--u)*2.2) calc(var(--u)*3) calc(var(--u)*2.6); background:rgba(255,246,228,.93); }
+  #result.compact .rhead { display:flex; align-items:baseline; justify-content:center; gap:calc(var(--u)*4); }
+  #result.compact #rTitle { font-size:calc(var(--u)*9); }
+  #result.compact #rWhy { font-size:calc(var(--u)*3.8); margin:1% 0 2%; }
+  #result.compact #rChart { width:27%; }
+  #result.compact #rScore { font-size:calc(var(--u)*3.6); line-height:1.35; }
+  #result.compact #rScore { flex:none; }
+  #result.compact #rScore .sc { font-size:calc(var(--u)*9); }
+  #result.compact #rScore > :not(.sc) { display:none; } /* 0点なので内訳は省く */
+  #result.compact #rStats { flex:1; min-width:0; }
+  #result.compact #rStats { font-size:calc(var(--u)*3.6); line-height:1.4; margin-top:0; text-align:left; }
+  #result.compact .rrow { gap:3.5%; }
+  #result.compact .rbtns { margin-top:3%; }
+  #result.compact #rBtn { font-size:calc(var(--u)*6); padding:calc(var(--u)*2.2) calc(var(--u)*8); }
+  #result.compact .sub2 { font-size:calc(var(--u)*5); padding:calc(var(--u)*2.2) calc(var(--u)*5); }
+  /* Xに投稿 */
+    font-size:calc(var(--u)*5.4); padding:calc(var(--u)*2.6) calc(var(--u)*6); box-shadow:0 5px 0 #000, 0 9px 16px rgba(0,0,0,.45); }
+  #rMsg { margin-top:calc(var(--u)*2); }
+  /* 裏面 */
+  #bake { bottom:8%; text-align:center; }
+  .bar { width:70%; height:calc(var(--u)*3); margin:2% auto 0; border-radius:99px; background:rgba(0,0,0,.45); overflow:hidden; border:2px solid rgba(255,240,210,.6); }
+  .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg,#ffb35c,#e0611f); }
+  /* 仕上げ */
+  #finish { bottom:2.5%; padding:0 2.5%; }
+  #finish .hint { text-align:center; }
+  .tools { display:flex; gap:1.8%; }
+  .tool { flex:1; border:none; border-radius:calc(var(--u)*3); padding:calc(var(--u)*1.8) 0 calc(var(--u)*1.6); background:rgba(255,246,228,.92); color:var(--ink); line-height:1.15; white-space:nowrap;
+    font-size:calc(var(--u)*4.4); font-weight:800; box-shadow:0 4px 0 rgba(90,40,10,.8); }
+  .tool .ic { display:block; width:calc(var(--u)*7.5); height:calc(var(--u)*7.5); margin:0 auto calc(var(--u)*1.2); border-radius:50%; }
+  .tool.on { background:#ffd27a; outline:3px solid #fff; transform:translateY(-6%); }
+  #done { width:100%; margin-top:3%; font-size:calc(var(--u)*7.6); padding:calc(var(--u)*2.6) 0; }
+  /* 完成写真 */
+  #photo { top:0; bottom:0; background:rgba(20,10,4,.82); }
+  .polaroid { position:absolute; left:9%; right:9%; top:8.5%; background:#fdfbf6; padding:4% 4% 0; box-shadow:0 18px 40px rgba(0,0,0,.6); transform:rotate(-2.5deg); animation:drop .6s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes drop { from { transform:translateY(-30%) rotate(-12deg); opacity:0; } }
+  .polaroid img { display:block; width:100%; aspect-ratio:1/1; object-fit:cover; background:#000; }
+  .polaroid .cap { color:#3a2414; text-align:center; padding:3.5% 0 4.5%; font-size:calc(var(--u)*5.4); font-weight:800; line-height:1.3; }
+  .polaroid .cap small { display:block; font-weight:600; font-size:calc(var(--u)*3.9); line-height:1.35; opacity:.8; margin-top:1.5%; }
+  .pbot { position:absolute; left:0; right:0; bottom:4%; padding:0 6%; display:flex; flex-direction:column; align-items:center; }
+  #pMsg { color:#f3e2c4; margin:calc(var(--u)*2.4) 0 calc(var(--u)*3.4); opacity:.9; }
+  #again { font-size:calc(var(--u)*7); padding:calc(var(--u)*2.6) calc(var(--u)*9); white-space:nowrap; }
+  /* タイトル */
+  #title { top:0; bottom:0; text-align:center;
+    background:linear-gradient(rgba(20,10,4,.78) 0%, rgba(20,10,4,.25) 34%, rgba(20,10,4,0) 50%, rgba(20,10,4,.35) 66%, rgba(20,10,4,.86) 100%); }
+  .logo { position:absolute; left:0; right:0; top:9%; line-height:1; font-weight:900; animation:logoIn .7s cubic-bezier(.2,1.5,.4,1) both; }
+  .logo .l1 { display:block; font-size:calc(var(--u)*10); color:#fff4dc; letter-spacing:.04em; transform:rotate(-3deg);
+    text-shadow:0 4px 0 #6b2c0e, 0 8px 16px rgba(0,0,0,.6); }
+  .logo .l2 { display:block; margin-top:calc(var(--u)*2.4); font-size:calc(var(--u)*13.4); color:#ffd27a; white-space:nowrap; transform:rotate(-3deg);
+    text-shadow:0 calc(var(--u)*1) 0 #c4321a, 0 calc(var(--u)*2) 0 #6b1c08, 0 calc(var(--u)*3.4) 22px rgba(0,0,0,.7); }
+  .logo .l2 span { display:inline-block; animation:hop 2.6s ease-in-out infinite; }
+  .logo .tag { display:block; margin-top:calc(var(--u)*5.6); font-size:calc(var(--u)*4.6); font-weight:700; color:#fff4dc; letter-spacing:.06em; text-shadow:0 2px 6px #000; }
+  @keyframes logoIn { from { opacity:0; transform:translateY(-25%) scale(.8); } }
+  @keyframes hop { 0%,70%,100% { transform:translateY(0) rotate(0); } 78% { transform:translateY(-22%) rotate(-8deg); } 86% { transform:translateY(0) rotate(4deg); } }
+  .tbot { position:absolute; left:0; right:0; bottom:4.5%; padding:0 5%; display:flex; flex-direction:column; align-items:center; }
+  .steps { display:flex; gap:2%; width:100%; margin-bottom:calc(var(--u)*7); }
+  .steps div { flex:1; padding:calc(var(--u)*2.4) 0 calc(var(--u)*2); border-radius:calc(var(--u)*3); background:rgba(255,246,228,.92); color:var(--ink);
+    font-size:calc(var(--u)*4.1); font-weight:800; line-height:1.25; box-shadow:0 4px 0 rgba(90,40,10,.8); }
+  .steps b { display:block; width:calc(var(--u)*6.4); height:calc(var(--u)*6.4); line-height:calc(var(--u)*6.4); margin:0 auto calc(var(--u)*1.2); border-radius:50%;
+    background:var(--accent); color:#fff; font-size:calc(var(--u)*4); }
+  #startBtn { font-size:calc(var(--u)*10); padding:calc(var(--u)*3.4) calc(var(--u)*16); animation:pulse 1.6s ease-in-out infinite; }
+  #startBtn:active { animation:none; }
+  @keyframes pulse { 0%,100% { scale:1; } 50% { scale:1.05; } }
+  .tnote { margin-top:calc(var(--u)*4.4); font-size:calc(var(--u)*3.6); opacity:.75; text-shadow:0 2px 6px #000; }
+  /* タイトルへ戻る（控えめな副ボタン） */
+  .sub2 { border:none; border-radius:999px; padding:calc(var(--u)*2.8) calc(var(--u)*6); font-size:calc(var(--u)*5.6); font-weight:800; white-space:nowrap; line-height:1.15;
+    color:var(--ink); background:linear-gradient(#fff8ea,#f0d6a6); box-shadow:0 6px 0 #8a4a1d, 0 10px 18px rgba(0,0,0,.35); }
+  .sub2:active { transform:translateY(4px); box-shadow:0 2px 0 #8a4a1d; }
+  .pbtns { display:flex; flex-direction:column; align-items:center; gap:calc(var(--u)*4.4); }
+  /* 消音ボタン（右上、全画面共通） */
+  #muteBtn { position:absolute; top:calc(var(--u)*2.2); right:calc(var(--u)*2); z-index:5; width:calc(var(--u)*9); height:calc(var(--u)*9); padding:0; border:none; border-radius:50%;
+    background:rgba(20,10,4,.55); box-shadow:0 0 0 2px rgba(255,244,220,.55); display:flex; align-items:center; justify-content:center; }
+  #muteBtn svg { width:62%; height:62%; fill:none; stroke:#fff4dc; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+  #muteBtn .off { display:none; }
+  #muteBtn.muted .on { display:none; } #muteBtn.muted .off { display:inline; }
+  #muteBtn.muted { background:rgba(120,30,10,.7); }
+  #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+  #toast { position:absolute; left:0; right:0; top:34%; text-align:center; font-size:calc(var(--u)*15); white-space:nowrap; font-weight:900; color:#fff;
+    text-shadow:0 5px 0 #7c1f08, 0 0 24px rgba(0,0,0,.8); opacity:0; pointer-events:none; transform:scale(.6); transition:opacity .15s, transform .25s cubic-bezier(.2,1.6,.4,1); }
+  #toast.on { opacity:1; transform:scale(1); }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+  <canvas id="fx"></canvas>
+  <div id="flash"></div>
+  <div id="ui">
+    <div id="title" class="panel">
+      <div class="logo"><span class="l1">お好み焼き、</span><span class="l2"><span>ひ</span><span style="animation-delay:.08s">っ</span><span style="animation-delay:.16s">く</span><span style="animation-delay:.24s">り</span><span style="animation-delay:.32s">返</span><span style="animation-delay:.4s">せ</span><span style="animation-delay:.48s">！</span></span>
+        <span class="tag">注いで、広げて、焼いて、返す。</span></div>
+      <div class="tbot">
+        <div class="steps"><div><b>1</b>注いで<br>広げる</div><div><b>2</b>焼き色を<br>見極める</div><div><b>3</b>フリックで<br>返す！</div></div>
+        <button class="big" id="startBtn">はじめる</button>
+        <div class="tnote">音が出ます（右上のボタンで消音）</div>
+      </div>
+    </div>
+    <div id="hud" class="panel show"><h1>お好み焼き、ひっくり返せ！</h1><div id="phase"></div></div>
+
+    <div id="pour" class="panel">
+      <div class="meter">
+        <div class="mrow">
+          <div class="mv"><small>直径</small><b id="mDia">0.0</b><i>cm</i></div>
+          <div class="mv"><small>厚み</small><b id="mThk">0.0</b><i>cm</i></div>
+        </div>
+        <div class="msub">生地 <b id="mVol">0</b> ml　／　この厚さの最高 <span class="mul" id="mMax">100点</span></div>
+        <div class="tbar"><em style="left:11.8%">1cm</em><em style="left:41.2%">2cm</em><em style="left:70.6%">3cm</em><i id="tMark"></i>
+          <span class="l">薄い：返しやすい<br>でも崩れやすい</span><span class="r">厚い：重く返しにくい<br>崩れにくい・高得点</span></div>
+      </div>
+      <div class="pctl">
+        <div class="hint" id="pourHint">ボタンを長押しして、ボウルから生地を落とす</div>
+        <div class="prow">
+          <button id="pourBtn">長押しで落とす<small>長く押すほど どっと出る</small></button>
+          <button class="big" id="cookBtn" disabled>焼く →</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="cook" class="panel">
+      <div class="hint">泡・湯気・ふちの色を見て、いい頃合いで</div>
+      <button class="big" id="flipBtn">返す！</button>
+    </div>
+
+    <div id="flip" class="panel">
+      <div class="guide">ヘラを上へフリック！<span class="sub"><span class="nw">速さと角度で決まる</span><span class="nw">（真上より少し右斜めが目安）</span></span></div>
+      <svg class="arrow" viewBox="0 0 40 90"><path d="M20 88 V14" stroke="#fff" stroke-width="7" stroke-linecap="round" fill="none" opacity=".9"/><path d="M5 26 L20 4 L35 26" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+
+    <div id="result" class="panel">
+      <div class="sheet">
+        <div class="rhead"><div id="rTitle"></div></div>
+        <div id="rWhy"></div>
+        <div class="rrow"><canvas id="rChart" width="300" height="260"></canvas><div id="rScore"></div></div>
+        <div id="rStats"></div>
+        <div class="rbtns" id="rBtns"><button class="big" id="rBtn"></button><button class="sub2" id="rToTitle">タイトルへ</button></div>
+      </div>
+    </div>
+
+    <div id="bake" class="panel">
+      <div class="hint">裏面を焼いています…</div>
+      <div class="bar"><i id="bakeBar"></i></div>
+    </div>
+
+    <div id="finish" class="panel">
+      <div class="hint">仕上げは自由に（採点なし）<br>ドラッグで塗る・かける・散らす</div>
+      <div class="tools">
+        <button class="tool on" data-tool="sauce"><span class="ic" style="background:radial-gradient(circle at 35% 30%,#a0582a,#4a2010)"></span>ソース</button>
+        <button class="tool" data-tool="mayo"><span class="ic" style="background:repeating-linear-gradient(45deg,#fff9e6 0 18%,#e9d9b4 18% 30%)"></span>マヨ</button>
+        <button class="tool" data-tool="katsuo"><span class="ic" style="background:radial-gradient(circle at 40% 35%,#f3c39a,#b9714a)"></span>鰹節</button>
+        <button class="tool" data-tool="aonori"><span class="ic" style="background:radial-gradient(#5f9a3a 20%,transparent 22%) 0 0/30% 30%,#d9ecc4"></span>青のり</button>
+      </div>
+      <button class="big" id="done">完成！</button>
+    </div>
+
+    <div id="photo" class="panel">
+      <div class="polaroid"><img id="photoImg" alt="完成写真"><div class="cap" id="photoCap"></div></div>
+      <div class="pbot">
+        <div class="pbtns"><button class="big" id="again">もう一度焼く</button><button class="sub2" id="pToTitle">タイトルへ</button></div>
+      </div>
+    </div>
+    <div id="toast"></div>
+    <button id="muteBtn" aria-label="音を消す" title="音を消す"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="#fff4dc"/><g class="on"><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/></g><g class="off"><path d="M16 9.5l5 5M21 9.5l-5 5"/></g></svg></button>
+  </div>
+</div>
+
+<script>/*__THREE__*/</script>
+<script>/*__LOGIC__*/</script>
+<script>
+(function () {
+'use strict';
+var L = window.OkoLogic;
+var $ = function (id) { return document.getElementById(id); };
+var app = $('app'), stage = $('stage'), fx = $('fx'), fxc = fx.getContext('2d');
+var rand = Math.random;
+function rr(a, b) { return a + (b - a) * rand(); }
+
+// ------------------------------------------------------------------ レイアウト（9:16）
+var W = 360, H = 640;
+function layout() {
+  var vw = window.innerWidth, vh = window.innerHeight;
+  if (vw / vh > 9 / 16) { H = vh; W = Math.round(vh * 9 / 16); } else { W = vw; H = Math.round(vw * 16 / 9); }
+  app.style.width = W + 'px'; app.style.height = H + 'px';
+  app.style.setProperty('--u', (W / 100) + 'px');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  fx.width = W * dpr; fx.height = H * dpr; fxc.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (renderer) { renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
+}
+
+// ------------------------------------------------------------------ 効果音（WebAudio 合成）
+var Sfx = {
+  ctx: null, master: null, noise: null, sizzleGain: null, sizzleFilter: null, muted: false, VOL: 0.8,
+  init: function () {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    var C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+    var ctx = this.ctx = new C();
+    this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : this.VOL; this.master.connect(ctx.destination);
+    var len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.noise = buf;
+    // ジュージュー：ループノイズ
+    var src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    var hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+    var bp = this.sizzleFilter = ctx.createBiquadFilter(); bp.type = 'peaking'; bp.frequency.value = 5200; bp.gain.value = 8;
+    var g = this.sizzleGain = ctx.createGain(); g.gain.value = 0;
+    src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(this.master); src.start();
+  },
+  setMuted: function (m) { // 消音：全部の音が通る master の音量を 0 にする
+    this.muted = m;
+    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : this.VOL, this.t(), 0.02);
+  },
+  t: function () { return this.ctx.currentTime; },
+  sizzle: function (level) {
+    if (!this.ctx) return;
+    this.sizzleGain.gain.setTargetAtTime(level * 0.16, this.t(), 0.12);
+  },
+  burst: function (opt) { // ノイズバースト汎用
+    if (!this.ctx) return;
+    var ctx = this.ctx, t0 = this.t() + (opt.delay || 0);
+    var src = ctx.createBufferSource(); src.buffer = this.noise;
+    var f = ctx.createBiquadFilter(); f.type = opt.type || 'bandpass'; f.frequency.setValueAtTime(opt.f0, t0);
+    if (opt.f1) f.frequency.exponentialRampToValueAtTime(opt.f1, t0 + opt.dur);
+    f.Q.value = opt.q || 1;
+    var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(opt.gain, t0 + (opt.attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + opt.dur);
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t0, Math.random()); src.stop(t0 + opt.dur + 0.05);
+  },
+  tone: function (opt) {
+    if (!this.ctx) return;
+    var ctx = this.ctx, t0 = this.t() + (opt.delay || 0);
+    var o = ctx.createOscillator(); o.type = opt.wave || 'sine';
+    o.frequency.setValueAtTime(opt.f0, t0);
+    if (opt.f1) o.frequency.exponentialRampToValueAtTime(opt.f1, t0 + opt.dur);
+    var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(opt.gain, t0 + (opt.attack || 0.01));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + opt.dur);
+    o.connect(g); g.connect(this.master); o.start(t0); o.stop(t0 + opt.dur + 0.05);
+  },
+  pop: function () { this.burst({ f0: rr(3000, 6000), q: 3, gain: 0.05, dur: 0.03 }); },
+  whoosh: function () { this.burst({ f0: 300, f1: 2400, q: 1.2, gain: 0.35, attack: 0.08, dur: 0.38 }); },
+  thud: function (heavy) {
+    this.tone({ f0: 140 - heavy * 40, f1: 45, gain: 0.55, dur: 0.22 });
+    this.burst({ type: 'lowpass', f0: 900, gain: 0.3, dur: 0.12 });
+    this.burst({ type: 'highpass', f0: 3000, gain: 0.25, attack: 0.03, dur: 0.9, delay: 0.03 }); // ジュッ
+  },
+  splat: function () {
+    for (var i = 0; i < 6; i++) this.burst({ type: 'lowpass', f0: rr(500, 1400), gain: 0.4, dur: rr(0.08, 0.2), delay: i * 0.035 + rr(0, 0.03) });
+    this.tone({ f0: 220, f1: 40, wave: 'triangle', gain: 0.4, dur: 0.4 });
+    this.burst({ type: 'highpass', f0: 2500, gain: 0.3, attack: 0.05, dur: 1.6, delay: 0.2 });
+  },
+  chime: function () { var n = [784, 988, 1175, 1568]; for (var i = 0; i < 4; i++) this.tone({ f0: n[i], wave: 'triangle', gain: 0.18, dur: 0.5, delay: i * 0.08 }); },
+  sad: function () { this.tone({ f0: 523, f1: 494, wave: 'triangle', gain: 0.16, dur: 0.3 }); this.tone({ f0: 440, f1: 392, wave: 'triangle', gain: 0.16, dur: 0.5, delay: 0.28 }); },
+  squish: function () { this.burst({ f0: rr(250, 450), f1: rr(600, 900), q: 2, gain: 0.12, dur: 0.12 }); },
+  sprinkle: function () { this.burst({ type: 'highpass', f0: 5000, gain: 0.04, dur: 0.05 }); },
+  shutter: function () { this.burst({ type: 'highpass', f0: 2000, gain: 0.4, dur: 0.05 }); this.burst({ type: 'highpass', f0: 1500, gain: 0.3, dur: 0.07, delay: 0.09 }); },
+  click: function () { this.tone({ f0: 900, f1: 600, gain: 0.12, dur: 0.06 }); }
+};
+
+// ------------------------------------------------------------------ Three.js シーン
+var renderer, scene, camera;
+renderer = new THREE.WebGLRenderer({ canvas: stage, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1d110a);
+scene.fog = new THREE.Fog(0x1d110a, 2.2, 4.5);
+camera = new THREE.PerspectiveCamera(50, 9 / 16, 0.01, 10);
+layout();
+window.addEventListener('resize', layout);
+
+scene.add(new THREE.HemisphereLight(0xfff0dc, 0x3b2618, 0.95));
+var sun = new THREE.DirectionalLight(0xfff4e6, 2.1);
+sun.position.set(0.35, 1.2, 0.6); sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+var sc = sun.shadow.camera; sc.left = -0.6; sc.right = 0.6; sc.top = 0.6; sc.bottom = -0.6; sc.near = 0.3; sc.far = 3;
+scene.add(sun);
+var warm = new THREE.PointLight(0xff8a3c, 0.6, 1.4); warm.position.set(-0.4, 0.5, -0.3); scene.add(warm);
+
+function canvasTex(w, h, draw) {
+  var c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+// 背景の壁（屋台風：板壁・提灯・小さな品書き）
+(function () {
+  var tex = canvasTex(1024, 512, function (g, w, h) {
+    var gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2a180d'); gr.addColorStop(1, '#140a05');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    for (var i = 0; i < 64; i++) { g.fillStyle = 'rgba(0,0,0,' + rr(0.1, 0.25) + ')'; g.fillRect(i * 16 + rr(-2, 2), 0, 2, h); }
+    [[170, 150], [850, 140]].forEach(function (p) {
+      var rg = g.createRadialGradient(p[0], p[1], 6, p[0], p[1], 170); rg.addColorStop(0, 'rgba(255,170,80,.75)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
+      g.fillStyle = rg; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#c8372a'; g.beginPath(); g.ellipse(p[0], p[1], 30, 42, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = 'rgba(255,220,160,.6)'; g.fillRect(p[0] - 30, p[1] - 3, 60, 6);
+      g.fillStyle = '#111'; g.fillRect(p[0] - 14, p[1] - 50, 28, 8); g.fillRect(p[0] - 14, p[1] + 42, 28, 8);
+    });
+    // 品書き（小さめ）
+    var labels = ['豚玉', 'いか玉', 'ミックス', 'もち明太'];
+    for (var k = 0; k < 4; k++) {
+      var x = 330 + k * 95;
+      g.fillStyle = '#e9d8b4'; g.fillRect(x, 70, 70, 190);
+      g.fillStyle = '#2a160b'; g.font = 'bold 30px system-ui, "Hiragino Sans", "Noto Sans CJK JP", sans-serif'; g.textAlign = 'center';
+      labels[k].split('').forEach(function (ch, i) { g.fillText(ch, x + 35, 108 + i * 36); });
+    }
+  });
+  var wall = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.2), new THREE.MeshBasicMaterial({ map: tex, fog: false, color: 0x9a8a80 }));
+  wall.position.set(0, 0.75, -2.2); scene.add(wall);
+})();
+// カウンター
+var woodTex = canvasTex(512, 256, function (g, w, h) {
+  g.fillStyle = '#7a4a26'; g.fillRect(0, 0, w, h);
+  for (var i = 0; i < 70; i++) { g.strokeStyle = 'rgba(40,20,8,' + rr(0.1, 0.3) + ')'; g.lineWidth = rr(1, 3); g.beginPath(); var y = rr(0, h); g.moveTo(0, y); g.bezierCurveTo(w * 0.3, y + rr(-10, 10), w * 0.6, y + rr(-10, 10), w, y + rr(-8, 8)); g.stroke(); }
+});
+var counter = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.06, 0.9), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.75 }));
+counter.position.set(0, -0.06, 0); counter.receiveShadow = true; scene.add(counter);
+// 鉄板
+var WORLD = { griddle: { hx: 0.31, hz: 0.2, y: 0 }, counter: { hx: 0.9, hz: 0.45, y: -0.03 }, floorY: -0.9 };
+var griddleTex = canvasTex(512, 512, function (g, w, h) {
+  g.fillStyle = '#4a4744'; g.fillRect(0, 0, w, h);
+  for (var i = 0; i < 1800; i++) { g.fillStyle = 'rgba(' + (rand() < 0.5 ? '0,0,0' : '120,110,100') + ',' + rr(0.03, 0.12) + ')'; g.fillRect(rr(0, w), rr(0, h), rr(1, 4), rr(1, 4)); }
+  for (var j = 0; j < 30; j++) { var gx = rr(0, w), gy = rr(0, h), rg = g.createRadialGradient(gx, gy, 2, gx, gy, rr(20, 70)); rg.addColorStop(0, 'rgba(70,40,20,.25)'); rg.addColorStop(1, 'rgba(70,40,20,0)'); g.fillStyle = rg; g.fillRect(0, 0, w, h); }
+});
+var griddle = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.03, 0.4),
+  [null, null, new THREE.MeshStandardMaterial({ map: griddleTex, color: 0xd0ccc8, metalness: 0.25, roughness: 0.42 }), null, null, null].map(function (m) { return m || new THREE.MeshStandardMaterial({ color: 0x2a2a2c, metalness: 0.3, roughness: 0.5 }); }));
+griddle.position.y = -0.015; griddle.receiveShadow = true; scene.add(griddle);
+var rim = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.012, 0.012), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.4 }));
+rim.position.set(0, 0.003, -0.206); scene.add(rim);
+
+// ------------------------------------------------------------------ お好み焼き（円盤）
+var X0 = -0.04; // 焼き位置
+var disc = null; // {group, mesh, geo, R, h, topCanvas, topTex, botCanvas, botTex, sideMat, base}
+
+function buildDiscGeometry(R, h, seg, rings) {
+  var pos = [], uv = [], idx = [];
+  function half(r) { return h / 2 * (1 - 0.32 * Math.pow(r / R, 6)); } // ふちを少し丸く
+  function cap(sign) {
+    var start = pos.length / 3;
+    pos.push(0, sign * half(0), 0); uv.push(0.5, 0.5);
+    for (var i = 1; i <= rings; i++) {
+      var r = R * i / rings;
+      for (var s = 0; s < seg; s++) {
+        var a = s / seg * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r;
+        pos.push(x, sign * half(r), z); uv.push(0.5 + x / (2 * R), 0.5 - sign * z / (2 * R));
+      }
+    }
+    var first = idx.length;
+    for (var s2 = 0; s2 < seg; s2++) {
+      var a1 = start + 1 + s2, b1 = start + 1 + (s2 + 1) % seg;
+      if (sign > 0) idx.push(start, b1, a1); else idx.push(start, a1, b1);
+    }
+    for (var ri = 1; ri < rings; ri++) {
+      for (var s3 = 0; s3 < seg; s3++) {
+        var i0 = start + 1 + (ri - 1) * seg + s3, i1 = start + 1 + (ri - 1) * seg + (s3 + 1) % seg;
+        var o0 = i0 + seg, o1 = i1 + seg;
+        if (sign > 0) idx.push(i0, i1, o1, i0, o1, o0); else idx.push(i0, o1, i1, i0, o0, o1);
+      }
+    }
+    return [first, idx.length - first];
+  }
+  var gTop = cap(1), gBot = cap(-1);
+  // 側面（少しふくらんだ帯）
+  var sStart = pos.length / 3, rows = 5;
+  for (var k = 0; k <= rows; k++) {
+    var t = k / rows, ang = Math.PI / 2 - t * Math.PI, y = Math.sin(ang) * half(R), rad = R * (1 + 0.015 * Math.cos(ang));
+    for (var s = 0; s <= seg; s++) { var a = s / seg * Math.PI * 2; pos.push(Math.cos(a) * rad, y, Math.sin(a) * rad); uv.push(s / seg, t); }
+  }
+  var sFirst = idx.length;
+  for (var k2 = 0; k2 < rows; k2++) for (var s4 = 0; s4 < seg; s4++) {
+    var p0 = sStart + k2 * (seg + 1) + s4, p1 = p0 + 1, q0 = p0 + seg + 1, q1 = q0 + 1;
+    idx.push(p0, p1, q1, p0, q1, q0);
+  }
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.addGroup(gTop[0], gTop[1], 0); geo.addGroup(gBot[0], gBot[1], 1); geo.addGroup(sFirst, idx.length - sFirst, 2);
+  geo.computeVertexNormals();
+  geo.userData.orig = Float32Array.from(pos);
+  return geo;
+}
+
+function rgbStr(c, a) { return 'rgba(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ',' + (a == null ? 1 : a) + ')'; }
+
+// 生地の具（キャベツ・紅しょうが・天かす）を描く
+function drawFilling(g, S, density, alpha) {
+  for (var i = 0; i < 260 * density; i++) {
+    var a = rr(0, Math.PI * 2), r = Math.sqrt(rand()) * S * 0.47, x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r;
+    g.save(); g.translate(x, y); g.rotate(rr(0, Math.PI));
+    var k = rand();
+    if (k < 0.72) { g.fillStyle = rand() < 0.5 ? 'rgba(170,205,110,' + alpha + ')' : 'rgba(225,238,190,' + alpha + ')'; g.fillRect(-rr(6, 16), -1.6, rr(12, 30), rr(2.2, 4)); }
+    else if (k < 0.82) { g.fillStyle = 'rgba(214,52,60,' + alpha + ')'; g.fillRect(-4, -1, rr(5, 9), 2.2); }
+    else if (k < 0.9) { // イカ：白い輪切り・短冊
+      g.fillStyle = 'rgba(248,244,236,' + alpha + ')'; g.strokeStyle = 'rgba(248,244,236,' + alpha + ')';
+      if (rand() < 0.5) { g.lineWidth = 2.6; g.beginPath(); g.arc(0, 0, rr(4, 6), 0, 7); g.stroke(); }
+      else { g.fillRect(-7, -2, rr(11, 16), 4); g.fillStyle = 'rgba(150,90,110,' + alpha * 0.7 + ')'; g.fillRect(-7, -2, 13, 1); }
+    }
+    else { g.fillStyle = 'rgba(236,200,120,' + alpha + ')'; g.beginPath(); g.arc(0, 0, rr(2, 4.5), 0, Math.PI * 2); g.fill(); }
+    g.restore();
+  }
+}
+
+function makeDisc(R, h) {
+  var S = 512;
+  var geo = buildDiscGeometry(R, h, 72, 14);
+  // 上面（生の面）
+  var base = document.createElement('canvas'); base.width = base.height = S;
+  var bg = base.getContext('2d');
+  bg.fillStyle = rgbStr(L.donenessColor(0)); bg.fillRect(0, 0, S, S);
+  for (var i = 0; i < 400; i++) { bg.fillStyle = 'rgba(255,255,240,' + rr(0.03, 0.12) + ')'; bg.beginPath(); bg.arc(rr(0, S), rr(0, S), rr(4, 18), 0, 7); bg.fill(); }
+  drawFilling(bg, S, 1, 0.85);
+  bg.fillStyle = 'rgba(250,236,196,.45)'; bg.fillRect(0, 0, S, S); // 生地が具を薄く覆う
+  var topCanvas = document.createElement('canvas'); topCanvas.width = topCanvas.height = S;
+  var topTex = new THREE.CanvasTexture(topCanvas); topTex.colorSpace = THREE.SRGBColorSpace;
+  var botCanvas = document.createElement('canvas'); botCanvas.width = botCanvas.height = 1024;
+  var botTex = new THREE.CanvasTexture(botCanvas); botTex.colorSpace = THREE.SRGBColorSpace;
+  var topMat = new THREE.MeshStandardMaterial({ map: topTex, roughness: 0.3, metalness: 0 });
+  var botMat = new THREE.MeshStandardMaterial({ map: botTex, roughness: 0.7 });
+  var sideMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB.apply(new THREE.Color(), L.donenessColor(0)), roughness: 0.4 });
+  sideMat.color.convertSRGBToLinear();
+  var mesh = new THREE.Mesh(geo, [topMat, botMat, sideMat]);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  var group = new THREE.Group(); group.add(mesh);
+  group.position.set(X0, h / 2, 0);
+  scene.add(group);
+  var D = { group: group, mesh: mesh, geo: geo, R: R, h: h, base: base, topCanvas: topCanvas, topTex: topTex,
+    botCanvas: botCanvas, botTex: botTex, topMat: topMat, sideMat: sideMat, bubbles: [], lastTopDraw: -1, pork: [] };
+  drawTop(D, 0);
+  return D;
+}
+// 落とした量・広げた直径に合わせて円盤の形を作り直す（体積保存：h = V / 面積）
+function setDiscShape(D, R, h) {
+  if (Math.abs(R - D.R) < 0.0004 && Math.abs(h - D.h) < 0.0002) return;
+  var geo = buildDiscGeometry(R, h, 72, 14);
+  D.mesh.geometry = geo; D.geo.dispose(); D.geo = geo; D.R = R; D.h = h;
+  D.group.position.y = h / 2;
+}
+// へらで円を描いた跡（生地の表面にうっすら渦）
+function drawSwirl(D, ang, rn) {
+  var g = D.base.getContext('2d'), S = 512, r = Math.min(0.48, rn * 0.5) * S;
+  g.lineCap = 'round';
+  g.strokeStyle = 'rgba(255,248,226,' + rr(0.08, 0.16) + ')'; g.lineWidth = rr(3, 7);
+  g.beginPath(); g.arc(S / 2, S / 2, r, ang - 0.35, ang + 0.35); g.stroke();
+  g.strokeStyle = 'rgba(190,150,90,' + rr(0.05, 0.1) + ')'; g.lineWidth = 1.5;
+  g.beginPath(); g.arc(S / 2, S / 2, r + 4, ang - 0.3, ang + 0.3); g.stroke();
+}
+
+// 豚バラ（ピンクの赤身と白い脂の縞）— ぶちまけ粒子と共用のテクスチャ
+var porkTex = canvasTex(256, 128, function (g, w, h) {
+  var bands = [['#e88f93', 0.0], ['#f6eadf', 0.16], ['#de7f86', 0.27], ['#f3e6da', 0.47], ['#e9979a', 0.56], ['#fbf1e8', 0.78], ['#d9767e', 0.88]];
+  for (var i = 0; i < bands.length; i++) { var y0 = bands[i][1] * h, y1 = (i + 1 < bands.length ? bands[i + 1][1] : 1) * h; g.fillStyle = bands[i][0]; g.fillRect(0, y0, w, y1 - y0 + 1); }
+  for (var k = 0; k < 120; k++) { g.strokeStyle = 'rgba(255,255,255,' + rr(0.05, 0.2) + ')'; g.lineWidth = rr(0.5, 2); var y = rr(0, h); g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(w * 0.3, y + rr(-6, 6), w * 0.7, y + rr(-6, 6), w, y + rr(-4, 4)); g.stroke(); }
+});
+// 波打った薄い肉片（XZ 平面、長さ1×幅1、y にうねり）
+var porkGeo = new THREE.PlaneGeometry(1, 1, 10, 3);
+porkGeo.rotateX(-Math.PI / 2);
+(function () { var p = porkGeo.attributes.position; for (var i = 0; i < p.count; i++) { var x = p.getX(i), z = p.getZ(i); p.setY(i, 0.09 * Math.sin(x * 9 + z * 2) + 0.05 * Math.cos(z * 6)); } porkGeo.computeVertexNormals(); })();
+var porkMat = new THREE.MeshStandardMaterial({ map: porkTex, roughness: 0.55, side: THREE.DoubleSide });
+// 焼く前に豚バラを生地の上にのせる（返すと鉄板側になる）
+function placePork(D) {
+  var n = 3, len = Math.min(D.R * 1.3, 0.11), wid = Math.min(len * 0.36, 0.035);
+  for (var i = 0; i < n; i++) {
+    var m = new THREE.Mesh(porkGeo, porkMat);
+    m.scale.set(len, 0.004 / 0.09 * 0.5, wid);
+    m.position.set(rr(-0.15, 0.15) * D.R, D.h / 2 + 0.0012, (i - 1) * wid * 1.15 + rr(-0.1, 0.1) * wid);
+    m.rotation.y = rr(-0.15, 0.15); m.castShadow = true;
+    D.group.add(m); D.pork.push(m);
+  }
+}
+
+function drawTop(D, d) {
+  var g = D.topCanvas.getContext('2d'), S = D.topCanvas.width;
+  g.drawImage(D.base, 0, 0);
+  // 乾いてくる：つやが消えて黄味が増す
+  g.fillStyle = 'rgba(232,196,120,' + (0.32 * L.smoothstep(0.2, 0.95, d)) + ')'; g.fillRect(0, 0, S, S);
+  // ふちから色づく
+  var c = L.donenessColor(Math.min(1, d * 1.05));
+  var rg = g.createRadialGradient(S / 2, S / 2, S * 0.30, S / 2, S / 2, S * 0.5);
+  rg.addColorStop(0, rgbStr(c, 0)); rg.addColorStop(0.75, rgbStr(c, 0.35 * L.smoothstep(0.15, 0.8, d))); rg.addColorStop(1, rgbStr(c, 0.95 * L.smoothstep(0.1, 0.7, d)));
+  g.fillStyle = rg; g.fillRect(0, 0, S, S);
+  // 泡：ふくらむ → はじけて穴
+  for (var i = 0; i < D.bubbles.length; i++) {
+    var b = D.bubbles[i], age = d - b.born;
+    if (age < 0.07) {
+      g.fillStyle = 'rgba(255,250,230,.75)'; g.beginPath(); g.arc(b.x, b.y, b.r * (0.6 + age * 6), 0, 7); g.fill();
+      g.strokeStyle = 'rgba(150,110,60,.5)'; g.lineWidth = 1.2; g.stroke();
+      g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.25, 0, 7); g.fill();
+    } else {
+      g.fillStyle = 'rgba(120,80,40,.55)'; g.beginPath(); g.arc(b.x, b.y, b.r * 0.55, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(255,240,200,.5)'; g.lineWidth = 1; g.stroke();
+    }
+  }
+  D.topTex.needsUpdate = true;
+}
+
+function drawCooked(D, d) { // 焼けた面（ひっくり返すと見える）。512 座標系で描いて拡大
+  var g = D.botCanvas.getContext('2d'), S = 512;
+  g.save(); g.scale(D.botCanvas.width / 512, D.botCanvas.width / 512);
+  g.fillStyle = rgbStr(L.donenessColor(d)); g.fillRect(0, 0, S, S);
+  drawFilling(g, S, 0.5, 0.35);
+  for (var i = 0; i < 260; i++) {
+    var x = rr(0, S), y = rr(0, S), r = rr(8, 46), dd = Math.max(0, Math.min(1, d + rr(-0.14, 0.12)));
+    var rg = g.createRadialGradient(x, y, 1, x, y, r); rg.addColorStop(0, rgbStr(L.donenessColor(dd), 0.55)); rg.addColorStop(1, rgbStr(L.donenessColor(dd), 0));
+    g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  var rim = g.createRadialGradient(S / 2, S / 2, S * 0.36, S / 2, S / 2, S * 0.5);
+  var cr = L.donenessColor(Math.min(1, d + 0.12));
+  rim.addColorStop(0, rgbStr(cr, 0)); rim.addColorStop(1, rgbStr(cr, 0.85));
+  g.fillStyle = rim; g.fillRect(0, 0, S, S);
+  if (d > 0.84) for (var j = 0; j < 90 * (d - 0.8) / 0.2; j++) { g.fillStyle = 'rgba(15,8,4,' + rr(0.4, 0.85) + ')'; g.beginPath(); g.arc(rr(40, S - 40), rr(40, S - 40), rr(3, 16), 0, 7); g.fill(); }
+  g.restore();
+  D.botTex.needsUpdate = true;
+}
+
+function setSideColor(D, d) {
+  var c = L.donenessColor(d);
+  D.sideMat.color.setRGB(c[0], c[1], c[2]).convertSRGBToLinear();
+}
+
+// 端が折れる：flap 側の頂点を折り目まわりに回転
+function foldDisc(D, amount, dir) {
+  var pos = D.geo.attributes.position, o = D.geo.userData.orig, xf = dir * D.R * 0.42, yAxis = -D.h / 2;
+  var a = -dir * amount, ca = Math.cos(a), sa = Math.sin(a);
+  for (var i = 0; i < pos.count; i++) {
+    var x = o[i * 3], y = o[i * 3 + 1], z = o[i * 3 + 2];
+    if (dir * (x - xf) > 0) {
+      var dx = x - xf, dy = y - yAxis;
+      x = xf + dx * ca - dy * sa; y = yAxis + dx * sa + dy * ca;
+    }
+    pos.setXYZ(i, x, y, z);
+  }
+  pos.needsUpdate = true; D.geo.computeVertexNormals();
+}
+
+function drawCrack(D, dir) {
+  var g = D.botCanvas.getContext('2d'), S = D.botCanvas.width;
+  var xu = S / 2 - dir * 0.42 * S / 2; // 底面は x 反転して見える
+  var k = S / 512;
+  g.strokeStyle = 'rgba(40,20,8,.85)'; g.lineWidth = 5 * k; g.beginPath();
+  for (var y = S * 0.08; y < S * 0.92; y += 14 * k) g.lineTo(xu + rr(-9, 9) * k, y);
+  g.stroke();
+  g.strokeStyle = 'rgba(245,225,170,.8)'; g.lineWidth = 2 * k; g.stroke();
+  D.botTex.needsUpdate = true;
+}
+
+// ------------------------------------------------------------------ ヘラ
+var spatula = new THREE.Group();
+(function () {
+  var metal = new THREE.MeshStandardMaterial({ color: 0xd8d8dc, metalness: 0.9, roughness: 0.25 });
+  var blade = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.0025, 0.11), metal); blade.position.x = 0.065; blade.castShadow = true;
+  var neck = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.003, 0.018), metal); neck.position.set(-0.02, 0.012, 0); neck.rotation.z = -0.5;
+  var handle = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.13, 12), new THREE.MeshStandardMaterial({ color: 0x8a5228, roughness: 0.6 }));
+  handle.rotation.z = Math.PI / 2 - 0.35; handle.position.set(-0.1, 0.045, 0); handle.castShadow = true;
+  spatula.add(blade, neck, handle);
+})();
+spatula.position.set(-0.8, 0.002, 0.0); scene.add(spatula);
+
+// ------------------------------------------------------------------ ボウル・生地の流れ・おたま（生地を落として広げる）
+var batterColor = new THREE.Color().setRGB(0.96, 0.89, 0.66).convertSRGBToLinear();
+var BOWL_LIP = new THREE.Vector3(X0 + 0.012, 0.13, -0.03); // 注ぎ口（ここを支点に傾く）
+var bowl = new THREE.Group(), bowlBody = new THREE.Group();
+var bowlBatter;
+(function () {
+  var pts = [];
+  for (var i = 0; i <= 12; i++) { var t = i / 12, a = t * Math.PI / 2; pts.push(new THREE.Vector2(0.02 + Math.sin(a) * 0.075, 0.075 - Math.cos(a) * 0.075)); }
+  var steel = new THREE.MeshStandardMaterial({ color: 0xc9ccd2, metalness: 0.85, roughness: 0.28, side: THREE.DoubleSide });
+  var shell = new THREE.Mesh(new THREE.LatheGeometry(pts, 40), steel);
+  var lip = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.004, 8, 40), steel); lip.rotation.x = Math.PI / 2; lip.position.y = 0.075;
+  bowlBatter = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshStandardMaterial({ color: batterColor, roughness: 0.25 }));
+  bowlBatter.rotation.x = -Math.PI / 2;
+  bowlBody.add(shell, lip, bowlBatter);
+  // 注ぎ口が原点に来るよう、ボウル本体をずらす（ふちの -x 側の点 = 注ぎ口）
+  bowlBody.position.set(0.095, -0.075, 0);
+  bowl.add(bowlBody);
+})();
+bowl.position.copy(BOWL_LIP); bowl.scale.setScalar(0.7); bowl.visible = false; scene.add(bowl);
+function setBowlLevel(remain) { // remain 0〜1
+  var y = 0.012 + 0.055 * remain, r = 0.02 + 0.075 * Math.sin(Math.acos(1 - y / 0.075));
+  bowlBatter.position.y = y; bowlBatter.scale.set(r * 0.98, r * 0.98, 1); bowlBatter.visible = remain > 0.01;
+}
+var stream = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 12, 1, true), new THREE.MeshStandardMaterial({ color: batterColor, roughness: 0.2 }));
+stream.visible = false; scene.add(stream);
+// おたま（背で生地を広げる）
+var ladle = new THREE.Group();
+(function () {
+  var steel = new THREE.MeshStandardMaterial({ color: 0xe4e6ea, metalness: 0.35, roughness: 0.3, side: THREE.DoubleSide });
+  var cup = new THREE.Mesh(new THREE.SphereGeometry(0.03, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), steel); cup.position.y = 0.03; cup.castShadow = true;
+  var handle = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.26, 8), steel);
+  handle.rotation.z = -1.05; handle.position.set(0.12, 0.1, 0); handle.castShadow = true;
+  ladle.add(cup, handle);
+})();
+ladle.visible = false; scene.add(ladle);
+
+// ------------------------------------------------------------------ 湯気
+var steamTex = canvasTex(64, 64, function (g, w) { var rg = g.createRadialGradient(32, 32, 0, 32, 32, 32); rg.addColorStop(0, 'rgba(255,255,255,.9)'); rg.addColorStop(0.4, 'rgba(255,255,255,.35)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = rg; g.fillRect(0, 0, w, w); });
+var steam = [];
+for (var si = 0; si < 90; si++) {
+  var sm = new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, depthWrite: false, opacity: 0 }));
+  sm.visible = false; scene.add(sm); steam.push({ s: sm, life: 0, max: 1, vx: 0, vy: 0, size: 0.04 });
+}
+function emitSteam(x, y, z, smoke, big) {
+  for (var i = 0; i < steam.length; i++) {
+    var p = steam[i]; if (p.life > 0) continue;
+    p.life = p.max = rr(1.2, 2.2) * (big ? 0.8 : 1); p.vx = rr(-0.015, 0.015); p.vy = rr(0.06, 0.13) * (big ? 2 : 1);
+    p.size = rr(0.03, 0.06) * (big ? 1.6 : 1); p.s.position.set(x, y, z); p.s.visible = true;
+    p.s.material.color.set(smoke ? 0x6b625a : 0xffffff); p.peak = smoke ? 0.5 : 0.32;
+    return;
+  }
+}
+function updateSteam(dt) {
+  for (var i = 0; i < steam.length; i++) {
+    var p = steam[i]; if (p.life <= 0) continue;
+    p.life -= dt; if (p.life <= 0) { p.s.visible = false; continue; }
+    var k = 1 - p.life / p.max;
+    p.s.position.x += (p.vx + Math.sin(k * 6 + i) * 0.01) * dt; p.s.position.y += p.vy * dt;
+    var sz = p.size * (1 + k * 2.2); p.s.scale.set(sz, sz, 1);
+    p.s.material.opacity = p.peak * Math.sin(Math.PI * Math.min(1, k * 1.2));
+  }
+}
+
+// ------------------------------------------------------------------ ぶちまけ粒子
+// 何の具か見て分かるよう、具材ごとに形とテクスチャを分ける：
+//  生地＝不定形の塊、キャベツ＝千切りの緑の細片、豚バラ＝ピンクと白の縞の波打つ薄片、
+//  イカ＝白い輪切り（リング）と皮つきの短冊、紅しょうが＝赤い細片、天かす＝小さな粒
+var MAXP = 700;
+function makePMesh(geo, mat, max) {
+  var m = new THREE.InstancedMesh(geo, mat || new THREE.MeshStandardMaterial({ roughness: 0.65 }), max || MAXP);
+  m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false; scene.add(m); return m;
+}
+var blobGeo = new THREE.IcosahedronGeometry(0.62, 1);
+(function () { var p = blobGeo.attributes.position; for (var i = 0; i < p.count; i++) { var k = 0.8 + 0.4 * Math.abs(Math.sin(p.getX(i) * 13 + p.getY(i) * 7 + p.getZ(i) * 11)); p.setXYZ(i, p.getX(i) * k, p.getY(i) * k, p.getZ(i) * k); } blobGeo.computeVertexNormals(); })();
+// キャベツの千切り：淡い黄緑の芯側〜濃い緑の葉先へのグラデーション＋葉脈
+var cabbageTex = canvasTex(128, 16, function (g, w, h) {
+  var gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#eef5d2'); gr.addColorStop(0.45, '#bcdc84'); gr.addColorStop(1, '#5f9e34');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,255,240,.55)'; g.fillRect(0, h * 0.42, w * 0.8, h * 0.16);
+});
+var cabbageGeo = new THREE.BoxGeometry(1, 1, 1, 6, 1, 1);
+(function () { var p = cabbageGeo.attributes.position; for (var i = 0; i < p.count; i++) { var x = p.getX(i); p.setY(i, p.getY(i) + 0.9 * x * x - 0.2); } cabbageGeo.computeVertexNormals(); })(); // 少し反った細片
+// イカの短冊：白い身に、片側だけ赤紫の皮
+var squidTex = canvasTex(128, 32, function (g, w, h) {
+  g.fillStyle = '#f7f3ec'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#b77a8c'; g.fillRect(0, 0, w, h * 0.2);
+  for (var i = 0; i < 40; i++) { g.fillStyle = 'rgba(120,50,80,' + rr(0.3, 0.7) + ')'; g.beginPath(); g.arc(rr(0, w), rr(0, h * 0.24), rr(0.8, 2.2), 0, 7); g.fill(); }
+  for (var k = 0; k < 6; k++) { g.strokeStyle = 'rgba(220,210,200,.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(k * w / 6 + 6, h * 0.3); g.lineTo(k * w / 6 + 2, h); g.stroke(); }
+});
+var ringGeo = new THREE.TorusGeometry(1, 0.3, 8, 18); ringGeo.rotateX(Math.PI / 2); // 輪切り（寝かせた輪）
+var pMeshes = {
+  blob: makePMesh(blobGeo),
+  strip: makePMesh(new THREE.BoxGeometry(1, 1, 1)),
+  cabbage: makePMesh(cabbageGeo, new THREE.MeshStandardMaterial({ map: cabbageTex, roughness: 0.45 })),
+  pork: makePMesh(porkGeo, new THREE.MeshStandardMaterial({ map: porkTex, roughness: 0.55, side: THREE.DoubleSide }), 80),
+  squid: makePMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ map: squidTex, roughness: 0.35 }), 80),
+  ring: makePMesh(ringGeo, new THREE.MeshStandardMaterial({ roughness: 0.3 }), 80)
+};
+var KIND_MESH = { batter: 'blob', tenkasu: 'blob', ginger: 'strip', cabbage: 'cabbage', pork: 'pork', squid: 'squid', ring: 'ring' };
+var parts = [], hitSounds = 0;
+var _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+function spawnPart(p) {
+  var mesh = pMeshes[KIND_MESH[p.kind]];
+  if (mesh.count >= mesh.instanceMatrix.count) return;
+  p.rest = p.rest || 0.25; p.rx = rr(0, 6); p.rz = rr(0, 6); p.wx = rr(-25, 25); p.wz = rr(-25, 25); p.hits = 0; p.flat = 1;
+  if (p.hh == null) p.hh = p.sy / 2;
+  p.r = p.hh;
+  p.mesh = mesh; p.idx = mesh.count;
+  mesh.setColorAt(p.idx, _c.setRGB(p.col[0], p.col[1], p.col[2]).convertSRGBToLinear());
+  mesh.count++; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  parts.push(p);
+}
+function updateParts(dt) {
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i], wasHits = p.hits;
+    var sub = 3; for (var k = 0; k < sub; k++) L.stepParticle(p, dt / sub, WORLD);
+    if (p.hits > wasHits && p.hits === 1 && p.y < 0.05) { if (hitSounds < 10 && rand() < 0.3) { hitSounds++; Sfx.burst({ type: 'highpass', f0: 2800, gain: 0.06, dur: 0.25 }); } }
+    if (p.sleep && p.kind === 'batter' && p.flat > 0.4) p.flat = Math.max(0.4, p.flat - dt * 2); // べちゃっと潰れる
+    // 着地したら寝かせる（具材の形が上から見えるように）
+    _e.set(p.sleep ? (p.tiltX || 0) : p.rx, p.ry || 0, p.sleep ? (p.tiltZ || 0) : p.rz); _q.setFromEuler(_e);
+    var spread = p.kind === 'batter' ? 1 + (1 - p.flat) * 0.5 : 1;
+    _s.set(p.sx * spread, p.sy * p.flat, p.sz * spread);
+    _v.set(p.x, p.sleep ? p.restFloor + p.hh * p.flat + (p.lift || 0) : p.y, p.z);
+    _m.compose(_v, _q, _s); p.mesh.setMatrixAt(p.idx, _m);
+  }
+  for (var key in pMeshes) pMeshes[key].instanceMatrix.needsUpdate = true;
+  hitSounds = Math.max(0, hitSounds - dt * 6);
+}
+function clearParts() { parts = []; for (var key in pMeshes) pMeshes[key].count = 0; }
+
+// 円盤を粒子に分解する：生地の塊と、具材（キャベツ・豚バラ・イカ・紅しょうが・天かす）
+function explode(D, ds) {
+  var botC = L.donenessColor(state.flipD), topC = L.donenessColor(0.05);
+  D.group.updateMatrixWorld();
+  var vel = new THREE.Vector3(ds.vx, ds.vy, 0);
+  var scaleR = Math.max(0.6, Math.min(1.3, D.R / 0.1)); // 生地が大きいほど具も多い
+  var plan = [['batter', 330], ['cabbage', 210], ['pork', 26], ['ring', 16], ['squid', 18], ['ginger', 34], ['tenkasu', 40]];
+  function emit(kind, ly, speedLo, speedHi) {
+    var a = rr(0, Math.PI * 2), r = Math.sqrt(rand()) * D.R;
+    var local = new THREE.Vector3(Math.cos(a) * r, ly, Math.sin(a) * r);
+    var w = local.clone().applyMatrix4(D.group.matrixWorld);
+    var rel = w.clone().sub(D.group.position);
+    var spinV = new THREE.Vector3(-ds.omega * rel.y, ds.omega * rel.x, 0);
+    var dir = new THREE.Vector3(rr(-1, 1), rr(-0.2, 1.2), rr(-1, 1)).normalize().multiplyScalar(rr(speedLo, speedHi));
+    var v = vel.clone().multiplyScalar(0.6).add(spinV.multiplyScalar(0.8)).add(dir);
+    return { x: w.x, y: w.y, z: w.z, vx: v.x, vy: v.y, vz: v.z, ry: rr(0, Math.PI * 2) };
+  }
+  plan.forEach(function (pl) {
+    var kind = pl[0], n = Math.round(pl[1] * (kind === 'batter' || kind === 'cabbage' ? scaleR : 1));
+    for (var i = 0; i < n; i++) {
+      var ly = rr(-0.5, 0.5) * D.h, p;
+      if (kind === 'batter') {
+        p = emit(kind, ly, 0.8, 3.0);
+        var big = rand() < 0.15 ? rr(1.8, 3) : 1, s = rr(0.006, 0.016) * big;
+        p.sx = s * rr(0.8, 1.5); p.sz = s * rr(0.8, 1.5); p.sy = Math.min(D.h, s * rr(0.4, 0.9)); p.col = ly < 0 ? botC : topC; p.rest = 0.15;
+        p.hh = p.sy * 0.62 * 0.5 * 1.6;
+      } else if (kind === 'cabbage') {
+        p = emit(kind, ly, 0.6, 2.4);
+        p.sx = rr(0.028, 0.05); p.sy = 0.0016; p.sz = rr(0.0035, 0.0055); p.rest = 0.35;
+        var t = rr(0.85, 1.08); p.col = [t, t, t * rr(0.85, 1)]; p.hh = 0.0012; p.lift = 0.0006;
+        p.tiltX = rr(-0.15, 0.15); p.tiltZ = rr(-0.1, 0.1);
+      } else if (kind === 'pork') {
+        // 生地の上にのせた豚バラ（上面＝ly>0 側）がちぎれて飛ぶ
+        p = emit(kind, D.h * 0.5, 0.5, 1.8);
+        p.sx = rr(0.035, 0.055); p.sz = rr(0.018, 0.026); p.sy = 0.02; p.rest = 0.12;
+        var tp = rr(0.95, 1.05); p.col = [tp, tp, tp]; p.hh = 0.0028; p.wx *= 0.4;
+      } else if (kind === 'ring') {
+        p = emit(kind, ly, 0.6, 2.2);
+        var rs = rr(0.008, 0.011); p.sx = p.sz = rs; p.sy = rs * 0.9; p.rest = 0.4;
+        p.col = rand() < 0.75 ? [0.97, 0.95, 0.92] : [0.9, 0.82, 0.84]; p.hh = rs * 0.3 * 0.9;
+      } else if (kind === 'squid') {
+        p = emit(kind, ly, 0.6, 2.2);
+        p.sx = rr(0.03, 0.042); p.sy = 0.004; p.sz = rr(0.008, 0.011); p.rest = 0.35; p.col = [1, 1, 1];
+      } else if (kind === 'ginger') {
+        p = emit(kind, ly, 0.8, 2.6);
+        p.sx = rr(0.008, 0.013); p.sy = 0.002; p.sz = 0.0022; p.col = [0.85, 0.2, 0.24]; p.rest = 0.3;
+      } else {
+        p = emit(kind, ly, 0.8, 3.0);
+        var tt = rr(0.004, 0.007); p.sx = p.sy = p.sz = tt; p.col = [0.95, 0.8, 0.45]; p.rest = 0.45;
+        p.hh = tt * 0.62 * 0.9;
+      }
+      p.kind = kind;
+      spawnPart(p);
+    }
+  });
+  D.group.visible = false;
+}
+function crumbs(D, x, n) {
+  var c = L.donenessColor(state.flipD);
+  for (var i = 0; i < n; i++) {
+    var p = { x: x + rr(-D.R, D.R), y: D.h + 0.01, z: rr(-D.R, D.R) * 0.8, vx: rr(-0.5, 0.5), vy: rr(0.3, 1.0), vz: rr(-0.4, 0.4), ry: rr(0, 6), rest: 0.2 };
+    if (rand() < 0.6) { var s = rr(0.004, 0.009); p.sx = s; p.sy = s * 0.6; p.sz = s; p.kind = 'batter'; p.col = c; p.hh = s * 0.6 * 0.5; }
+    else { p.sx = rr(0.02, 0.035); p.sy = 0.0016; p.sz = 0.004; p.kind = 'cabbage'; p.col = [1, 1, 1]; p.hh = 0.0012; }
+    spawnPart(p);
+  }
+}
+
+// ------------------------------------------------------------------ 鰹節（熱でゆらゆら踊る）
+var MAXF = 600;
+var flakeGeo = new THREE.PlaneGeometry(1, 0.6, 4, 2);
+(function () { var p = flakeGeo.attributes.position; for (var i = 0; i < p.count; i++) { var x = p.getX(i); p.setZ(i, 0.18 * x * x); } flakeGeo.computeVertexNormals(); })();
+var fMesh = new THREE.InstancedMesh(flakeGeo, new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.8 }), MAXF);
+fMesh.count = 0; fMesh.frustumCulled = false; scene.add(fMesh);
+var flakes = [];
+function addFlake(pt) {
+  if (flakes.length >= MAXF) return;
+  var f = { p: pt.clone(), yaw: rr(0, Math.PI * 2), ph: rr(0, 10), sp: rr(2.5, 4.5), s: rr(0.007, 0.013) };
+  var t = rr(0.75, 1.1); fMesh.setColorAt(flakes.length, _c.setRGB(0.93 * t, 0.68 * t, 0.52 * t).convertSRGBToLinear());
+  flakes.push(f); fMesh.count = flakes.length; fMesh.instanceColor.needsUpdate = true;
+}
+function updateFlakes(time) {
+  for (var i = 0; i < flakes.length; i++) {
+    var f = flakes[i];
+    var tilt = -Math.PI / 2 + 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(time * f.sp + f.ph)); // 起き上がったり寝たり
+    _e.set(tilt, f.yaw + 0.25 * Math.sin(time * f.sp * 0.7 + f.ph), 0.3 * Math.sin(time * f.sp * 1.3 + f.ph), 'YXZ');
+    _q.setFromEuler(_e); _s.set(f.s, f.s, f.s);
+    _v.set(f.p.x, f.p.y + f.s * 0.25 * (0.5 + 0.5 * Math.sin(time * f.sp + f.ph)), f.p.z);
+    _m.compose(_v, _q, _s); fMesh.setMatrixAt(i, _m);
+  }
+  fMesh.instanceMatrix.needsUpdate = true;
+}
+
+// ------------------------------------------------------------------ カメラ
+var camPos = new THREE.Vector3(0, 0.6, 0.7), camLook = new THREE.Vector3(0, 0, 0);
+var camPosT = camPos.clone(), camLookT = camLook.clone(), shake = 0;
+function camTo(px, py, pz, lx, ly, lz) { camPosT.set(px, py, pz); camLookT.set(lx, ly, lz); }
+function camView(name) {
+  var sz = state.size ? state.size.diameter / 0.24 : 1;
+  if (name === 'pour') camTo(X0 + 0.02, 0.62, 0.3, X0 + 0.01, -0.03, -0.075);
+  else if (name === 'cook') camTo(X0 * 0.5, 0.5 * (0.7 + 0.3 * sz), 0.52 * (0.7 + 0.3 * sz), X0 * 0.5, 0, 0);
+  else if (name === 'flight') camTo(0.34, 0.46, 0.72, 0.0, 0.11, 0);
+  // 大失敗：ぶちまけた鉄板を画面の上寄りに収める（下は結果シート）。注視点を手前に寄せて鉄板を上へずらす
+  else if (name === 'mess') camTo(state.ds.x * 0.6 + 0.02, 0.54, 0.47, state.ds.x * 0.6, -0.04, 0.11);
+  // 成功・惜しいの結果：着地したお好み焼き（焼き面が上）を、結果シートの上の空きに大きく見せる。大きさに合わせて距離を変える
+  else if (name === 'landed') { var lx = state.discX, ld = Math.max(0.4, state.size.diameter * 3.9); camTo(lx + ld * 0.06, ld * 0.62, ld * 0.62, lx, 0, ld * 0.24); }
+  else if (name === 'finish') { var x = state.discX, dist = (state.size.diameter / 2) / (0.78 * 0.262); camTo(x, dist * 0.96, dist * 0.28, x, 0, 0.004); }
+}
+
+// ------------------------------------------------------------------ ゲーム状態
+var state = { phase: 'pour', size: null, d: 0, cookT: 0, timeScale: 1, discX: X0, shape: { volume: 0, diameter: 0 } };
+var ui = { panels: ['title', 'pour', 'cook', 'flip', 'result', 'bake', 'finish', 'photo'] };
+function show(name) { ui.panels.forEach(function (p) { $(p).classList.toggle('show', p === name); }); }
+function setPhaseText(t) { $('phase').textContent = t; }
+function toast(text, ms) { var el = $('toast'); el.textContent = text; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove('on'); }, ms || 1100); }
+function flash(a) { var el = $('flash'); el.style.transition = 'none'; el.style.opacity = a; requestAnimationFrame(function () { el.style.transition = 'opacity .5s'; el.style.opacity = 0; }); }
+
+function resetRound() {
+  if (disc) { scene.remove(disc.group); disc.geo.dispose(); disc = null; }
+  state.shape = { volume: 0, diameter: 0 }; state.size = null; pour.down = false; pour.holdT = 0; pour.rate = 0; spreadDrag = null;
+  clearParts(); flakes = []; fMesh.count = 0;
+  spatula.position.set(-0.8, 0.002, 0); spatula.rotation.set(0, 0, 0);
+  state.d = 0; state.cookT = 0; state.timeScale = 1; state.discX = X0; state.judgement = null; state.flick = null; state.score = 0;
+}
+
+// ---- 生地を落として広げる
+var pour = { down: false, holdT: 0, rate: 0, tilt: 0, glugAcc: 0 };
+var spreadDrag = null; // { ang, revs }
+function cm(x) { return (x * 100).toFixed(1); }
+function updateMeter() {
+  var sh = state.shape, has = sh.volume > 0;
+  var h = has ? L.thicknessFrom(sh.volume, sh.diameter) : 0;
+  $('mDia').textContent = has ? cm(sh.diameter) : '—';
+  $('mThk').textContent = has ? cm(h) : '—';
+  $('mVol').textContent = Math.round(sh.volume * 1e6);
+  $('mMax').textContent = (has ? L.maxScore(L.makeSize(sh.volume, sh.diameter)) : 100) + '点';
+  $('tMark').style.left = (L.clamp((h * 100 - 0.6) / 3.4, 0, 1) * 100) + '%';
+  $('cookBtn').disabled = sh.volume < L.POUR.vMin;
+  var hint;
+  if (sh.volume <= 0) hint = 'ボタンを長押しして、ボウルから生地を落とす';
+  else if (sh.volume < L.POUR.vMin) hint = 'もう少し落とそう（' + Math.round(L.POUR.vMin * 1e6) + 'ml 以上）';
+  else if (sh.volume >= L.POUR.vMax - 1e-9) hint = 'ボウルが空。鉄板の生地をぐるぐるなぞって広げよう';
+  else if (spreadDrag && spreadDrag.atMax) hint = 'これ以上は広がらない（' + (sh.diameter >= L.SPREAD.dMax - 1e-6 ? '鉄板いっぱい' : '生地が切れる') + '）';
+  else hint = '生地のふちを指でぐるぐる → 広がって薄くなる<br>もっと落とせば厚くなる';
+  if ($('pourHint').innerHTML !== hint) $('pourHint').innerHTML = hint;
+}
+function syncDiscToShape() {
+  var sh = state.shape; if (!disc || sh.volume <= 0) return;
+  setDiscShape(disc, sh.diameter / 2, L.thicknessFrom(sh.volume, sh.diameter));
+  disc.group.visible = true;
+}
+// ---- タイトル：鉄板の上で焼けていくお好み焼きを、カメラがゆっくり回って見せる
+function goTitle() {
+  resetRound(); state.phase = 'title'; state.phaseT = 0; show('title'); setPhaseText(''); $('hud').style.visibility = 'hidden';
+  bowl.visible = false; stream.visible = false; ladle.visible = false;
+  disc = makeDisc(0.1, 0.016); placePork(disc);
+  state.d = 0.62; drawTop(disc, state.d); setSideColor(disc, state.d * 0.85); disc.topMat.roughness = 0.6;
+  Sfx.sizzle(Sfx.ctx ? 0.3 : 0);
+  titleCam(0); camPos.copy(camPosT); camLook.copy(camLookT);
+}
+function titleCam(t) { var a = 0.9 + t * 0.12; camTo(X0 + Math.cos(a) * 0.44, 0.36, Math.sin(a) * 0.44, X0, 0.0, 0.05); }
+function goPour() {
+  $('hud').style.visibility = '';
+  resetRound(); state.phase = 'pour'; show('pour'); setPhaseText('生地を落として広げる'); camView('pour'); Sfx.sizzle(0);
+  disc = makeDisc(0.02, 0.01); disc.group.visible = false;
+  bowl.visible = true; pour.away = 1; bowl.position.copy(BOWL_LIP); bowl.rotation.set(0, 0, 0.25); pour.tilt = 0.25; setBowlLevel(1);
+  updateMeter();
+}
+function setPouring(on) {
+  if (state.phase !== 'pour') return;
+  Sfx.init();
+  if (on && !pour.down) { pour.down = true; pour.holdT = 0; }
+  if (!on) pour.down = false;
+  $('pourBtn').classList.toggle('on', pour.down);
+}
+var pourBtn = $('pourBtn');
+pourBtn.addEventListener('pointerdown', function (e) { e.preventDefault(); try { pourBtn.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } setPouring(true); });
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { pourBtn.addEventListener(t, function () { setPouring(false); }); });
+pourBtn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+// 画面上の生地の中心と半径（px）
+var _pv = new THREE.Vector3();
+function discScreen() {
+  _pv.set(disc.group.position.x, disc.h, 0).project(camera);
+  var cx = (_pv.x + 1) / 2 * W, cy = (1 - _pv.y) / 2 * H;
+  _pv.set(disc.group.position.x + disc.R, disc.h, 0).project(camera);
+  var ex = (_pv.x + 1) / 2 * W;
+  return { x: cx, y: cy, r: Math.max(8, Math.abs(ex - cx)) };
+}
+var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), _gp = new THREE.Vector3();
+function pointerOnGround(p, y) {
+  ndc.set(p.x / W * 2 - 1, -(p.y / H) * 2 + 1); raycaster.setFromCamera(ndc, camera);
+  groundPlane.constant = -y; return raycaster.ray.intersectPlane(groundPlane, _gp);
+}
+function spreadStart(p) {
+  if (state.shape.volume <= 0) return;
+  var c = discScreen();
+  spreadDrag = { ang: Math.atan2(p.y - c.y, p.x - c.x), revs: 0, atMax: false, p: p };
+  moveLadle(p);
+}
+function spreadMove(p) {
+  if (!spreadDrag) return;
+  var c = discScreen(), dx = p.x - c.x, dy = p.y - c.y, dist = Math.hypot(dx, dy);
+  var ang = Math.atan2(dy, dx), da = ang - spreadDrag.ang;
+  while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+  spreadDrag.ang = ang; spreadDrag.p = p;
+  moveLadle(p);
+  // 生地のふち付近（半径の 0.35〜1.8 倍）をなぞった角度だけ広がる。向きはどちらでもよい
+  if (dist < c.r * 0.35 || dist > c.r * 1.8) return;
+  var revs = Math.min(Math.abs(da), 0.9) / (2 * Math.PI);
+  var before = state.shape.diameter;
+  var next = L.spreadStep(state.shape, revs);
+  state.shape = { volume: next.volume, diameter: next.diameter };
+  spreadDrag.atMax = next.atMax; spreadDrag.revs += revs;
+  if (next.diameter > before) {
+    drawSwirl(disc, ang, Math.min(1, dist / c.r) * 0.92);
+    if (rand() < 0.35) Sfx.squish();
+  }
+}
+function spreadEnd() { spreadDrag = null; ladle.visible = false; }
+function moveLadle(p) {
+  var g = pointerOnGround(p, disc.h * 0.6); if (!g) return;
+  ladle.visible = true; ladle.position.set(g.x, Math.max(disc.h - 0.004, 0), g.z);
+}
+
+function startCook() {
+  if (state.phase !== 'pour' || state.shape.volume < L.POUR.vMin) return;
+  Sfx.init(); Sfx.click();
+  pour.down = false; spreadEnd(); stream.visible = false; bowl.visible = false; $('pourBtn').classList.remove('on');
+  state.size = L.makeSize(state.shape.volume, state.shape.diameter); // 実測の直径・厚み
+  syncDiscToShape(); placePork(disc);
+  state.phase = 'cook'; state.cookT = 0; state.d = 0; state.cookDur = L.cookTime(state.size); state.phaseT = 0;
+  show('cook'); setPhaseText('豚バラをのせて焼く（直径' + cm(state.size.diameter) + 'cm・厚さ' + cm(state.size.thickness) + 'cm）'); camView('cook');
+  Sfx.burst({ type: 'highpass', f0: 2500, gain: 0.3, attack: 0.02, dur: 1.0 });
+}
+
+function decideFlip() {
+  if (state.phase !== 'cook') return;
+  Sfx.click();
+  state.phase = 'toFlip'; state.flipD = state.d; state.phaseT = 0;
+  drawCooked(disc, state.d);
+  show('flip'); $('flip').querySelector('.guide').style.opacity = 0.0;
+  setPhaseText('焼き加減 ' + L.donenessPercent(state.d) + '%（' + L.donenessLabel(state.d) + '）');
+  camView('flight');
+}
+
+// ---- フリック入力
+var swipe = null;
+function capture(e) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 合成イベント等 */ } }
+function appXY(e) { var r = app.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+stage.addEventListener('pointerdown', function (e) {
+  Sfx.init();
+  var p = appXY(e);
+  if (state.phase === 'flipReady') { swipe = { pts: [{ x: p.x, y: p.y, t: performance.now() }] }; capture(e); }
+  else if (state.phase === 'pour') { capture(e); spreadStart(p); }
+  else if (state.phase === 'finish') { capture(e); paint.start(p); }
+});
+stage.addEventListener('pointermove', function (e) {
+  var p = appXY(e);
+  if (swipe) { swipe.pts.push({ x: p.x, y: p.y, t: performance.now() }); drawTrail(); }
+  else if (state.phase === 'pour' && spreadDrag) spreadMove(p);
+  else if (state.phase === 'finish' && paint.down) paint.move(p);
+});
+function endPointer(e) {
+  if (swipe) {
+    var pts = swipe.pts; swipe = null;
+    var end = pts[pts.length - 1], tEnd = end.t, s = pts[0];
+    for (var i = pts.length - 1; i >= 0; i--) { if (tEnd - pts[i].t >= 90) { s = pts[i]; break; } s = pts[i]; }
+    var dx = end.x - s.x, dy = end.y - s.y, dt = tEnd - s.t;
+    if (Math.hypot(dx, dy) < 25 || dy > -10) { fadeTrail(); toast('上へフリック！', 800); return; }
+    doFlick(L.flickFromSwipe(dx, dy, dt, H));
+    fadeTrail();
+  }
+  if (paint.down) paint.end();
+  if (spreadDrag) spreadEnd();
+}
+stage.addEventListener('pointerup', endPointer);
+stage.addEventListener('pointercancel', endPointer);
+var trailAlpha = 0;
+function drawTrail() {
+  fxc.clearRect(0, 0, W, H); var pts = swipe.pts; if (pts.length < 2) return;
+  fxc.lineCap = 'round'; fxc.lineJoin = 'round';
+  for (var i = 1; i < pts.length; i++) {
+    fxc.strokeStyle = 'rgba(255,230,180,' + (0.2 + 0.7 * i / pts.length) + ')'; fxc.lineWidth = 4 + 10 * i / pts.length;
+    fxc.beginPath(); fxc.moveTo(pts[i - 1].x, pts[i - 1].y); fxc.lineTo(pts[i].x, pts[i].y); fxc.stroke();
+  }
+  trailAlpha = 1;
+}
+function fadeTrail() { trailAlpha = 0.999; }
+
+function doFlick(flick) {
+  var size = state.size, d = state.flipD;
+  var lp = L.launchParams(size, d, flick);
+  state.flick = flick; state.lp = lp; state.judgement = lp.judgement; state.score = L.score(size, lp.judgement);
+  state.ds = L.makeDiscState(disc.group.position.x, disc.h / 2, lp);
+  state.ds.y0 = disc.h / 2;
+  state.phase = 'flight'; state.phaseT = 0; state.broken = false; state.messCam = false; state.timeScale = 0.55;
+  show(null); setPhaseText('');
+  Sfx.whoosh();
+}
+
+// ---- 着地
+function land() {
+  var j = state.judgement, D = disc;
+  state.phase = 'landed'; state.phaseT = 0; state.timeScale = 1;
+  state.discX = state.ds.x;
+  state.landRot0 = state.ds.rot;
+  Sfx.thud(L.thicknessNorm(state.size));
+  shake = 0.006 + 0.01 * L.thicknessNorm(state.size);
+  for (var i = 0; i < 14; i++) emitSteam(state.discX + rr(-D.R, D.R) * 0.8, D.h, rr(-D.R, D.R) * 0.6, false, true);
+  if (j.tier === 'success') {
+    toast('成功！', 1200); setTimeout(function () { Sfx.chime(); }, 150);
+    state.bounce = state.flipD > 0.85 ? { vy: 0.55 + 0.6 * (state.flipD - 0.85) / 0.15, y: 0, vx: 0.16 } : null; // 焦げは硬く跳ねてずれる
+  } else {
+    toast('惜しい…', 1200); Sfx.sad();
+    state.foldDir = j.ev >= 0 ? -1 : 1;
+    drawCrack(D, state.foldDir); crumbs(D, state.discX, 50);
+  }
+}
+
+function explodeNow() {
+  state.broken = true; state.brokenT = 0;
+  explode(disc, state.ds);
+  Sfx.splat(); flash(0.7); shake = 0.05; toast('大失敗！！', 1600);
+  state.hitStop = 0.14;
+  camLookT.set(state.ds.x, state.ds.y * 0.8, 0);
+}
+
+// ---- 結果
+var WHY = {
+  fast: '速すぎ：高く上がって回りすぎ', slow: '遅すぎ：回転が足りない',
+  steep: '角度が急すぎ：前に進まない', flat: '角度が浅すぎ：前に飛びすぎ'
+};
+function whyText(j) {
+  if (j.tier === 'success' && j.e < 0.35) return 'ど真ん中！ 窓の中心をとらえた';
+  var main = Math.abs(j.ev) >= Math.abs(j.ea) ? (j.ev > 0 ? WHY.fast : WHY.slow) : (j.ea > 0 ? WHY.steep : WHY.flat);
+  var extra = '';
+  if (j.tier === 'collapse') {
+    if (state.flipD < 0.4) extra = '／焼きが浅く生地が弱かった';
+    else if (L.thicknessNorm(state.size) < 0.3) extra = '／薄い生地（' + cm(state.size.thickness) + 'cm）は崩れやすい';
+  } else if (j.tier === 'near') extra = '／端が折れた';
+  if (state.flipD > 0.85 && j.tier !== 'collapse') extra += '／焦げて硬く跳ねた';
+  return main + extra;
+}
+function showResult() {
+  var j = state.judgement, size = state.size;
+  state.phase = 'result';
+  var titles = { success: '成功！', near: '惜しい…', collapse: '大失敗！！' };
+  var colors = { success: '#2f8a2f', near: '#c07a0a', collapse: '#c4321a' };
+  $('rTitle').textContent = titles[j.tier]; $('rTitle').style.color = colors[j.tier];
+  // 理由は「／」の区切りでだけ折り返す（語の途中で改行しない）
+  var why = whyText(j).split('／');
+  $('rWhy').innerHTML = why.map(function (w, i) { return '<span class="nw">' + w + (i < why.length - 1 ? '／' : '') + '</span>'; }).join('');
+  $('rStats').innerHTML =
+    // 項目ごとに nowrap：列が狭いときは「・」などの区切りで折り返す（数値と単位を分断しない）
+    '<span class="nw">直径 <b>' + cm(size.diameter) + '</b>cm・</span><span class="nw">厚さ <b>' + cm(size.thickness) + '</b>cm・</span>' +
+    '<span class="nw">焼き加減 <b>' + L.donenessPercent(state.flipD) + '%</b>（' + L.donenessLabel(state.flipD) + '）</span><br>' +
+    '<span class="nw">速さ <b>' + state.flick.speed.toFixed(2) + '</b> m/s・</span><span class="nw">角度 <b>' + Math.round(state.flick.angle) + '°</b></span>';
+  $('rScore').innerHTML =
+    // 100点満点からの減点の内訳（各行の合計が点数と一致する）
+    '<div class="sc">' + state.score + '点</div>' +
+    (function () {
+      var bd = L.scoreBreakdown(size, j), m = function (v) { return v ? '−' + v : '0'; };
+      return '<span class="nw">100点から</span><br>' +
+        '<span class="nw">返しのずれ ' + m(bd.flick) + '</span><br>' +
+        '<span class="nw">焼き加減 ' + m(bd.doneness) + '</span><br>' +
+        '<span class="nw">薄さ ' + m(bd.thin) + '</span>';
+    })();
+  drawChart(j, state.flick);
+  $('rBtn').textContent = j.tier === 'collapse' ? 'もう一度' : '裏面を焼く →';
+  $('rToTitle').style.display = j.tier === 'collapse' ? '' : 'none'; // 大失敗はここで終わりなのでタイトルへ戻れる。成功・惜しいは完成写真の画面で
+  if (j.tier !== 'collapse') camView('landed');
+  // 大失敗はシートを小さくし、点数を見出しの横へ、数値をグラフの横へ移す（ぶちまけた具材を見せる）
+  var compact = j.tier === 'collapse', sheet = document.querySelector('#result .sheet');
+  $('result').classList.toggle('compact', compact);
+  if (compact) { document.querySelector('#result .rhead').appendChild($('rScore')); document.querySelector('#result .rrow').appendChild($('rStats')); }
+  else { document.querySelector('#result .rrow').appendChild($('rScore')); sheet.insertBefore($('rStats'), $('rBtns')); }
+  show('result');
+}
+// ---- 完成写真：画面に表示している写真（正方形の中央切り抜き）。共有機能とは無関係（共有なし版と同じ）
+function capturePhotoCanvas() {
+  var sw = stage.width, sh = stage.height, ch = Math.min(sh, sw);
+  var c = document.createElement('canvas'); c.width = sw; c.height = ch;
+  c.getContext('2d').drawImage(stage, 0, Math.round((sh - ch) / 2), sw, ch, 0, 0, sw, ch);
+  return c;
+}
+
+function drawChart(j, flick) {
+  var c = $('rChart'), g = c.getContext('2d'), w = c.width, h = c.height, win = j.window;
+  // 表示範囲：速さ 0〜6 m/s、角度 20〜90°
+  var v0 = 0.5, v1 = 6, a0 = 20, a1 = 90, pad = 46;
+  function X(v) { return pad + (v - v0) / (v1 - v0) * (w - pad - 8); }
+  function Y(a) { return h - pad - (a - a0) / (a1 - a0) * (h - pad - 8); }
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = '#f6c9bd'; g.fillRect(pad, 8, w - pad - 8, h - pad - 8);
+  function ell(k, col) {
+    g.fillStyle = col; g.beginPath();
+    for (var i = 0; i <= 64; i++) { var t = i / 64 * Math.PI * 2; var x = X(win.center.speed + Math.cos(t) * win.width.speed * k), y = Y(win.center.angle + Math.sin(t) * win.width.angle * k); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.fill();
+  }
+  g.save(); g.beginPath(); g.rect(pad, 8, w - pad - 8, h - pad - 8); g.clip();
+  ell(win.collapseAt, '#ffe08a'); ell(1, '#8fd18a');
+  g.restore();
+  g.fillStyle = '#5a3a20'; g.font = 'bold 28px system-ui, "Hiragino Sans", "Noto Sans CJK JP", sans-serif'; g.textAlign = 'center';
+  g.fillText('速さ →', pad + (w - pad - 8) / 2, h - 10);
+  g.save(); g.translate(30, 8 + (h - pad - 8) / 2); g.rotate(-Math.PI / 2); g.fillText('角度 →', 0, 0); g.restore();
+  var px = Math.max(pad + 6, Math.min(w - 14, X(flick.speed))), py = Math.max(14, Math.min(h - pad - 6, Y(flick.angle)));
+  g.strokeStyle = '#1a0d05'; g.lineWidth = 4;
+  g.beginPath(); g.moveTo(px - 9, py - 9); g.lineTo(px + 9, py + 9); g.moveTo(px + 9, py - 9); g.lineTo(px - 9, py + 9); g.stroke();
+  g.font = 'bold 26px system-ui, "Hiragino Sans", "Noto Sans CJK JP", sans-serif'; g.fillStyle = '#2f6a2a'; g.fillText('成功', Math.max(pad + 30, Math.min(w - 38, X(win.center.speed))), Math.max(34, Y(win.center.angle + win.width.angle) - 8));
+}
+$('rBtn').addEventListener('click', function () {
+  Sfx.click();
+  if (state.judgement.tier === 'collapse') { goPour(); return; }
+  state.phase = 'bake'; state.phaseT = 0; show('bake'); setPhaseText('裏面'); camView('cook');
+  camTo(state.discX, 0.42, 0.45, state.discX, 0, 0);
+});
+
+// ---- 仕上げ（自由・採点なし）
+var tool = 'sauce';
+document.querySelectorAll('.tool').forEach(function (b) {
+  b.addEventListener('click', function () { tool = b.dataset.tool; Sfx.click(); document.querySelectorAll('.tool').forEach(function (x) { x.classList.toggle('on', x === b); }); });
+});
+var raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function hitDisc(p) {
+  ndc.set(p.x / W * 2 - 1, -(p.y / H) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  var hits = raycaster.intersectObject(disc.mesh, false);
+  return hits.length ? hits[0] : null;
+}
+var paint = {
+  down: false, last: null, lastUV: null, dist: 0,
+  start: function (p) { this.down = true; this.last = p; this.lastUV = null; this.dist = 0; this.apply(p, true); },
+  move: function (p) { this.dist += Math.hypot(p.x - this.last.x, p.y - this.last.y); this.last = p; this.apply(p, false); },
+  end: function () { this.down = false; this.lastUV = null; },
+  apply: function (p, first) {
+    var hit = hitDisc(p); if (!hit || !hit.uv) { this.lastUV = null; return; }
+    var mi = hit.face.materialIndex; if (mi === 2) return;
+    var cvs = mi === 1 ? disc.botCanvas : disc.topCanvas, tex = mi === 1 ? disc.botTex : disc.topTex;
+    var g = cvs.getContext('2d'), S = cvs.width, x = hit.uv.x * S, y = (1 - hit.uv.y) * S;
+    var px = S / (disc.R * 2) * 0.01; // 1cm あたりの px
+    var prev = this.lastUV && this.lastUV.mi === mi ? this.lastUV : null;
+    if (tool === 'sauce') {
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      g.strokeStyle = 'rgb(74,30,11)'; g.lineWidth = px * 2.6;
+      g.beginPath(); g.moveTo(prev ? prev.x : x, prev ? prev.y : y); g.lineTo(x + 0.01, y); g.stroke();
+      g.strokeStyle = 'rgba(160,90,50,.22)'; g.lineWidth = px * 0.8; g.stroke(); // つや
+      if (rand() < 0.25) Sfx.squish();
+    } else if (tool === 'mayo') {
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      g.strokeStyle = 'rgba(150,120,80,.35)'; g.lineWidth = px * 0.75;
+      var off = px * 0.12; g.beginPath(); g.moveTo((prev ? prev.x : x) + off, (prev ? prev.y : y) + off * 1.4); g.lineTo(x + off, y + off * 1.4); g.stroke();
+      g.strokeStyle = '#fff8e2'; g.lineWidth = px * 0.6;
+      g.beginPath(); g.moveTo(prev ? prev.x : x, prev ? prev.y : y); g.lineTo(x + 0.01, y); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = px * 0.18; g.stroke();
+      if (rand() < 0.2) Sfx.squish();
+    } else if (tool === 'aonori') {
+      var n = first ? 60 : 16;
+      for (var i = 0; i < n; i++) { var a = rr(0, 7), r = Math.sqrt(rand()) * px * 2.2; g.fillStyle = rand() < 0.5 ? '#3d7326' : '#5c9a35'; var gs = S / 512; g.fillRect(x + Math.cos(a) * r, y + Math.sin(a) * r, rr(2.5, 5) * gs, rr(2.5, 5) * gs); }
+      if (rand() < 0.5) Sfx.sprinkle();
+    } else if (tool === 'katsuo') {
+      var cnt = first ? 14 : (this.dist > 8 ? 5 : 0); if (cnt) this.dist = 0;
+      for (var k = 0; k < cnt; k++) {
+        var q = { x: p.x + rr(-14, 14), y: p.y + rr(-14, 14) }, h2 = hitDisc(q);
+        if (h2) addFlake(h2.point.clone().add(new THREE.Vector3(0, 0.002, 0)));
+      }
+      if (cnt) Sfx.sprinkle();
+    }
+    tex.needsUpdate = true;
+    this.lastUV = { x: x, y: y, mi: mi };
+  }
+};
+$('done').addEventListener('click', function () {
+  Sfx.shutter();
+  var sz = state.size.diameter / 0.24, x = state.discX;
+  // 写真用アングル
+  camPos.set(x + 0.02, 0.27 * sz + 0.05, 0.27 * sz + 0.04); camLook.set(x, 0.0, 0.0);
+  camera.position.copy(camPos); camera.lookAt(camLook);
+  $('fx').getContext('2d').clearRect(0, 0, W, H);
+  renderer.render(scene, camera);
+  $('photoImg').src = capturePhotoCanvas().toDataURL('image/png');
+  var now = new Date();
+  $('photoCap').innerHTML = '<span class="nw">お好み焼き</span><span class="nw">（直径' + cm(state.size.diameter) + 'cm・</span><span class="nw">厚さ' + cm(state.size.thickness) + 'cm）</span>　<span class="nw">' + state.score + '点</span>' +
+    '<small><span class="nw">' + now.getFullYear() + '.' + (now.getMonth() + 1) + '.' + now.getDate() + '</span>　<span class="nw">焼き加減 ' + L.donenessPercent(state.flipD) + '%・' +
+    { success: 'きれいに返せた', near: 'ちょっと折れた', collapse: '' }[state.judgement.tier] + '</span></small>';
+  flash(0.9); state.phase = 'photo'; show('photo'); setPhaseText('');
+  camPosT.copy(camPos); camLookT.copy(camLook);
+});
+$('again').addEventListener('click', function () { Sfx.click(); goPour(); });
+$('startBtn').addEventListener('click', function () { Sfx.init(); Sfx.click(); goPour(); });
+// 消音ボタン：設定はこの端末のブラウザに覚えておく（保存できない環境でも動く）
+function applyMute(m) {
+  Sfx.setMuted(m);
+  var b = $('muteBtn'), label = m ? '音を出す' : '音を消す';
+  b.classList.toggle('muted', m); b.setAttribute('aria-label', label); b.title = label;
+  try { localStorage.setItem('oko.muted', m ? '1' : '0'); } catch (e) { /* 保存不可 */ }
+}
+$('muteBtn').addEventListener('click', function () { var m = !Sfx.muted; applyMute(m); if (!m) { Sfx.init(); Sfx.click(); } });
+try { if (localStorage.getItem('oko.muted') === '1') applyMute(true); } catch (e) { /* 読めなくても既定は音あり */ }
+function toTitle() { Sfx.click(); flash(0.5); goTitle(); }
+$('pToTitle').addEventListener('click', toTitle);
+$('rToTitle').addEventListener('click', toTitle);
+$('cookBtn').addEventListener('click', startCook);
+$('flipBtn').addEventListener('click', decideFlip);
+
+// ------------------------------------------------------------------ メインループ
+var clock = new THREE.Clock(), time = 0, steamAcc = 0, popAcc = 0;
+function update(rdt) {
+  time += rdt;
+  var D = disc;
+  if (state.hitStop > 0) { state.hitStop -= rdt; rdt *= 0.08; }
+  var dt = rdt * state.timeScale;
+  state.phaseT = (state.phaseT || 0) + rdt;
+
+  if (state.phase === 'title' && D) {
+    titleCam(state.phaseT);
+    steamAcc += 10 * rdt;
+    while (steamAcc > 1) { steamAcc--; var ta = rr(0, 7), tr = Math.sqrt(rand()) * D.R; emitSteam(X0 + Math.cos(ta) * tr, D.h + 0.005, Math.sin(ta) * tr * 0.9, false, false); }
+  }
+
+  if (state.phase === 'pour') {
+    var P = L.POUR, full = state.shape.volume >= P.vMax - 1e-12;
+    var tTilt = pour.down ? (full ? 1.3 : 0.6 + 0.65 * L.smoothstep(0, P.rampTime, pour.holdT)) : 0.25;
+    pour.tilt += (tTilt - pour.tilt) * (1 - Math.exp(-rdt * 10));
+    bowl.rotation.z = pour.tilt;
+    // 落とさない間はボウルを奥右へ退ける（広げる生地が隠れないように）
+    var tAway = pour.down ? 0 : 1;
+    pour.away = (pour.away == null ? 1 : pour.away) + (tAway - (pour.away == null ? 1 : pour.away)) * (1 - Math.exp(-rdt * 9));
+    bowl.position.set(BOWL_LIP.x + 0.13 * pour.away, BOWL_LIP.y + 0.03 * pour.away, BOWL_LIP.z - 0.06 * pour.away);
+    if (pour.down && !full && pour.away < 0.08) {
+      pour.holdT += rdt;
+      pour.rate = L.pourRate(pour.holdT);
+      state.shape = L.pourStep(state.shape, pour.rate * rdt);
+      var sr = 0.0028 + 0.0075 * (pour.rate - P.rateMin) / (P.rateMax - P.rateMin), top = disc.group.visible ? disc.h : 0;
+      stream.visible = true; stream.scale.set(sr, BOWL_LIP.y - top, sr);
+      stream.position.set(BOWL_LIP.x - sr * 0.6, (BOWL_LIP.y + top) / 2, BOWL_LIP.z);
+      pour.glugAcc += rdt * (3 + 6 * pour.rate / P.rateMax);
+      if (pour.glugAcc > 1) { pour.glugAcc = 0; Sfx.burst({ type: 'lowpass', f0: rr(400, 900), gain: 0.18, dur: rr(0.06, 0.14) }); }
+    } else { pour.rate = 0; stream.visible = false; }
+    syncDiscToShape();
+    if (disc.group.visible && time - disc.lastTopDraw > 0.12) { drawTop(disc, 0); disc.lastTopDraw = time; }
+    setBowlLevel(1 - state.shape.volume / P.vMax);
+    if (ladle.visible) ladle.rotation.y = Math.sin(time * 9) * 0.15;
+    var areaK = state.shape.volume > 0 ? Math.min(1, L.area(state.shape.diameter) / 0.05) : 0;
+    Sfx.sizzle(0.25 + 0.5 * areaK);
+    if (disc.group.visible && rand() < rdt * 6) { var a2 = rr(0, 7), r2 = Math.sqrt(rand()) * disc.R; emitSteam(X0 + Math.cos(a2) * r2, disc.h + 0.004, Math.sin(a2) * r2, false, false); }
+    updateMeter();
+  }
+
+  if (state.phase === 'cook') {
+    state.cookT += dt; state.d = Math.min(1, state.cookT / state.cookDur);
+    var d = state.d;
+    // 泡が増える
+    var target = Math.floor(170 * L.smoothstep(0.12, 0.8, d));
+    while (D.bubbles.length < target) {
+      var a = rr(0, 7), r = Math.sqrt(rand()) * 0.43 * 512;
+      D.bubbles.push({ x: 256 + Math.cos(a) * r, y: 256 + Math.sin(a) * r, r: rr(3, 8), born: d });
+      popAcc += 1;
+    }
+    if (time - D.lastTopDraw > 0.2) { drawTop(D, d); D.lastTopDraw = time; }
+    setSideColor(D, Math.min(1, d * 0.85));
+    D.topMat.roughness = 0.3 + 0.5 * d; // つやが消える
+    // 湯気：だんだん増え、焦げると灰色の煙
+    var rate = 5 + 22 * L.smoothstep(0.1, 0.55, d) * (1 - 0.5 * L.smoothstep(0.85, 1, d));
+    steamAcc += rate * dt;
+    while (steamAcc > 1) { steamAcc--; var aa = rr(0, 7), rr2 = Math.sqrt(rand()) * D.R; emitSteam(X0 + Math.cos(aa) * rr2, D.h + 0.005, Math.sin(aa) * rr2 * 0.9, d > 0.88 && rand() < (d - 0.85) * 5, false); }
+    // 音：ジュー＋泡のはじける音、焦げるとパチパチ
+    Sfx.sizzle(0.5 + 0.5 * L.smoothstep(0, 0.4, d));
+    if (popAcc > 0 && rand() < 0.3) { popAcc = Math.max(0, popAcc - 3); Sfx.pop(); }
+    if (d > 0.88 && rand() < 0.15) Sfx.burst({ type: 'highpass', f0: 4000, gain: 0.1, dur: 0.02 });
+    var label = d < 0.2 ? '生地がジュー…' : d < 0.45 ? 'ふつふつ泡が出てきた' : d < 0.65 ? '泡がはじけ、ふちが色づく' : d < 0.82 ? 'ふちがこんがり。いい香り' : d < 0.93 ? '煙が出てきた！' : '焦げてる！！';
+    setPhaseText(label);
+  }
+
+  if (state.phase === 'toFlip') {
+    // ヘラを差し込む
+    var k = Math.min(1, state.phaseT / 0.55), e = 1 - Math.pow(1 - k, 3);
+    spatula.position.x = -0.8 + (X0 - D.R * 0.35 - (-0.8)) * e;
+    D.group.position.y = D.h / 2 + 0.003 * e;
+    Sfx.sizzle(0.35);
+    if (k >= 1) { state.phase = 'flipReady'; $('flip').querySelector('.guide').style.opacity = 1; }
+  }
+
+  if (state.phase === 'flight') {
+    var ds = state.ds;
+    // ヘラが跳ね上がって戻る
+    var st = state.phaseT;
+    var up = st < 0.12 ? st / 0.12 : Math.max(0, 1 - (st - 0.12) / 0.5);
+    spatula.rotation.z = 0.7 * up; spatula.position.y = 0.002 + 0.04 * up;
+    spatula.position.x = X0 - D.R * 0.35 - Math.max(0, st - 0.3) * 0.8;
+    if (!state.broken) {
+      var steps = 4;
+      for (var i = 0; i < steps && !ds.landed; i++) L.stepDisc(ds, dt / steps);
+      D.group.position.set(ds.x, ds.y, 0); D.group.rotation.z = ds.rot;
+      camLookT.y = Math.max(0.11, ds.y * 0.65 + 0.03); camPosT.y = 0.46 + Math.max(0, ds.y - 0.2) * 0.6;
+      if (state.judgement.tier === 'collapse' && ds.t >= state.lp.tBreak) explodeNow();
+      else if (ds.landed) land();
+    } else {
+      state.brokenT += rdt;
+      if (state.brokenT > 0.7 && !state.messCam) { state.messCam = true; camView('mess'); }
+      state.timeScale = Math.min(0.8, state.timeScale + rdt * 0.5);
+      if (state.brokenT > 3.4) showResult();
+    }
+    Sfx.sizzle(0.2);
+  }
+
+  if (state.phase === 'landed') {
+    var t = state.phaseT, j = state.judgement;
+    var target = -Math.PI; // 裏返った姿勢
+    var kk = Math.min(1, t / 0.18);
+    D.group.rotation.z = state.landRot0 + (target - state.landRot0) * (1 - Math.pow(1 - kk, 2));
+    var squash = 1 - 0.28 * Math.exp(-t * 9) * Math.cos(t * 30);
+    D.group.scale.set(1 + (1 - squash) * 0.3, squash, 1 + (1 - squash) * 0.3);
+    if (j.tier === 'near') foldDisc(D, 2.85 * L.smoothstep(0.05, 0.45, t), state.foldDir);
+    if (state.bounce) {
+      var b = state.bounce; b.vy -= 9.8 * rdt; b.y += b.vy * rdt; state.discX += b.vx * rdt;
+      D.group.rotation.x = 0.15 * Math.sin(t * 20) * Math.max(0, b.y) * 20;
+      if (b.y <= 0 && b.vy < 0) { b.y = 0; if (Math.abs(b.vy) > 0.25) { b.vy = -b.vy * 0.4; b.vx *= 0.5; Sfx.thud(0.3); } else { b.vy = 0; b.vx = 0; state.bounce = null; D.group.rotation.x = 0; } }
+      D.group.position.y = D.h / 2 + Math.max(0, b ? b.y : 0);
+    } else D.group.position.y = D.h / 2;
+    D.group.position.x = state.discX;
+    Sfx.sizzle(0.9);
+    if (t > 1.5) { D.group.scale.set(1, 1, 1); showResult(); }
+  }
+
+  if (state.phase === 'result' || state.phase === 'bake' || state.phase === 'finish') {
+    if (D && D.group.visible && state.phase !== 'finish') { steamAcc += 8 * rdt; while (steamAcc > 1) { steamAcc--; emitSteam(state.discX + rr(-D.R, D.R) * 0.8, D.h, rr(-D.R, D.R) * 0.6, false, false); } }
+  }
+  if (state.phase === 'bake') {
+    var bk = Math.min(1, state.phaseT / 3);
+    $('bakeBar').style.width = (bk * 100) + '%';
+    setSideColor(D, Math.min(1, state.flipD * 0.85 + 0.15 * bk));
+    Sfx.sizzle(0.8);
+    if (bk >= 1) {
+      state.phase = 'finish'; show('finish'); setPhaseText('仕上げ'); camView('finish'); Sfx.sizzle(0.3);
+    }
+  }
+  if (state.phase === 'finish' && D) { if (rand() < rdt * 3) emitSteam(state.discX + rr(-D.R, D.R) * 0.7, D.h, rr(-D.R, D.R) * 0.5, false, false); }
+
+  updateSteam(rdt);
+  if (parts.length) updateParts(dt);
+  if (flakes.length) updateFlakes(time);
+
+  // スワイプ跡のフェード
+  if (trailAlpha > 0 && trailAlpha < 1) { trailAlpha -= rdt * 3; fx.style.opacity = Math.max(0, trailAlpha); if (trailAlpha <= 0) { fxc.clearRect(0, 0, W, H); fx.style.opacity = 1; trailAlpha = 0; } }
+
+  // カメラ
+  var cs = 1 - Math.exp(-rdt * (state.phase === 'flight' ? 3 : 4));
+  camPos.lerp(camPosT, cs); camLook.lerp(camLookT, cs);
+  camera.position.copy(camPos);
+  if (shake > 0.0002) { camera.position.x += rr(-1, 1) * shake; camera.position.y += rr(-1, 1) * shake; shake *= Math.exp(-rdt * 8); }
+  camera.lookAt(camLook);
+}
+
+// 描画が重い端末では解像度を自動で下げる（フレーム時間の移動平均で判断）
+var maxPR = Math.min(window.devicePixelRatio || 1, 2), curPR = maxPR, frameAvg = 16, prCooldown = 0;
+var FIXED_PR = /[?&]fixedpr\b/.test(location.search);
+function adaptResolution(rawDt) {
+  if (FIXED_PR) return;
+  frameAvg += (rawDt * 1000 - frameAvg) * 0.1; prCooldown -= rawDt;
+  if (prCooldown > 0) return;
+  var next = curPR;
+  if (frameAvg > 40 && curPR > 0.5) next = Math.max(0.5, curPR * 0.8);
+  else if (frameAvg < 18 && curPR < maxPR) next = Math.min(maxPR, curPR * 1.15);
+  if (next !== curPR) { curPR = next; renderer.setPixelRatio(curPR); renderer.setSize(W, H, false); prCooldown = 1.0; }
+}
+function frame() {
+  var raw = clock.getDelta();
+  var dt = Math.min(0.05, raw);
+  adaptResolution(Math.min(raw, 0.5));
+  update(dt);
+  if (state.phase !== 'photo') renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+// 自動テスト用の読み取り口（ゲーム進行には影響しない）
+window.__oko = {
+  get phase() { return state.phase; },
+  audio: function () { return { muted: Sfx.muted, ctx: Sfx.ctx ? Sfx.ctx.state : null, gain: Sfx.master ? Sfx.master.gain.value : null }; },
+  info: function () { return { size: state.size && { diameter: state.size.diameter, thickness: state.size.thickness, volume: state.size.volume }, shape: { volume: state.shape.volume, diameter: state.shape.diameter, thickness: state.shape.volume > 0 ? L.thicknessFrom(state.shape.volume, state.shape.diameter) : 0 },
+    meter: { dia: $('mDia').textContent, thk: $('mThk').textContent, vol: $('mVol').textContent, max: $('mMax').textContent }, kinds: parts.reduce(function (o, p) { o[p.kind] = (o[p.kind] || 0) + 1; return o; }, {}), d: state.d, flipD: state.flipD, flick: state.flick, judgement: state.judgement && { tier: state.judgement.tier, e: state.judgement.e, flickPenalty: state.judgement.flickPenalty }, breakdown: state.judgement && state.size ? L.scoreBreakdown(state.size, state.judgement) : null, score: state.score, particles: parts.length, flakes: flakes.length, discY: disc ? disc.group.position.y : null, discRot: disc ? disc.group.rotation.z : null }; },
+  viewH: function () { return H; },
+  discScreen: function () { var c = discScreen(), r = app.getBoundingClientRect(); return { x: c.x + r.left, y: c.y + r.top, r: c.r }; },
+  // 宙を舞っている間も含めた、円盤の中心の画面位置（#app 内の座標。OGP画像の切り抜きに使う）
+  discCenter: function () { if (!disc) return null; var p = disc.group.getWorldPosition(new THREE.Vector3()).project(camera); return { x: (p.x + 1) / 2 * W, y: (1 - p.y) / 2 * H }; },
+  pixelRatio: function () { return renderer.getPixelRatio(); },
+  appRect: function () { var r = app.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }
+};
+
+goTitle();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
