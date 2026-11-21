@@ -261,7 +261,7 @@
 var L = window.OkoLogic;
 var $ = function (id) { return document.getElementById(id); };
 var app = $('app'), stage = $('stage'), fx = $('fx'), fxc = fx.getContext('2d');
-var rand = Math.random;
+var rand = function () { return Math.random(); }; // 呼ぶたびに参照（告知動画の撮影で乱数を固定できるように）
 function rr(a, b) { return a + (b - a) * rand(); }
 
 // ------------------------------------------------------------------ レイアウト（9:16）
@@ -277,55 +277,87 @@ function layout() {
 }
 
 // ------------------------------------------------------------------ 効果音（WebAudio 合成）
+// 音の部品はどの AudioContext でも鳴らせる形（ctx・出力先・時刻を引数で受ける）。告知動画の書き出しでも同じ関数を使う
+function makeNoise(ctx) {
+  var len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+function makeSizzle(ctx, noise, dest) { // ジュージュー：ループノイズ。戻り値の gain で音量を変える
+  var src = ctx.createBufferSource(); src.buffer = noise; src.loop = true;
+  var hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+  var bp = ctx.createBiquadFilter(); bp.type = 'peaking'; bp.frequency.value = 5200; bp.gain.value = 8;
+  var g = ctx.createGain(); g.gain.value = 0;
+  src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(dest); src.start();
+  return g;
+}
+function playBurst(ctx, dest, noise, opt, now) { // ノイズバースト汎用
+  var t0 = now + (opt.delay || 0);
+  var src = ctx.createBufferSource(); src.buffer = noise;
+  var f = ctx.createBiquadFilter(); f.type = opt.type || 'bandpass'; f.frequency.setValueAtTime(opt.f0, t0);
+  if (opt.f1) f.frequency.exponentialRampToValueAtTime(opt.f1, t0 + opt.dur);
+  f.Q.value = opt.q || 1;
+  var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(opt.gain, t0 + (opt.attack || 0.005));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + opt.dur);
+  src.connect(f); f.connect(g); g.connect(dest);
+  src.start(t0, opt.off); src.stop(t0 + opt.dur + 0.05);
+}
+function playTone(ctx, dest, opt, now) {
+  var t0 = now + (opt.delay || 0);
+  var o = ctx.createOscillator(); o.type = opt.wave || 'sine';
+  o.frequency.setValueAtTime(opt.f0, t0);
+  if (opt.f1) o.frequency.exponentialRampToValueAtTime(opt.f1, t0 + opt.dur);
+  var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(opt.gain, t0 + (opt.attack || 0.01));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + opt.dur);
+  o.connect(g); g.connect(dest); o.start(t0); o.stop(t0 + opt.dur + 0.05);
+}
 var Sfx = {
-  ctx: null, master: null, noise: null, sizzleGain: null, sizzleFilter: null, muted: false, VOL: 0.8,
+  ctx: null, master: null, noise: null, sizzleGain: null, muted: false, VOL: 0.8,
+  cap: null, capSizzle: -1, // 告知動画の撮影中：鳴らさずに { name, args } を記録する
   init: function () {
+    if (this.cap) return;
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     var C = window.AudioContext || window.webkitAudioContext; if (!C) return;
     var ctx = this.ctx = new C();
     this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : this.VOL; this.master.connect(ctx.destination);
-    var len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
-    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    this.noise = buf;
-    // ジュージュー：ループノイズ
-    var src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
-    var hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
-    var bp = this.sizzleFilter = ctx.createBiquadFilter(); bp.type = 'peaking'; bp.frequency.value = 5200; bp.gain.value = 8;
-    var g = this.sizzleGain = ctx.createGain(); g.gain.value = 0;
-    src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(this.master); src.start();
+    this.noise = makeNoise(ctx);
+    this.sizzleGain = makeSizzle(ctx, this.noise, this.master);
   },
   setMuted: function (m) { // 消音：全部の音が通る master の音量を 0 にする
     this.muted = m;
     if (this.master) this.master.gain.setTargetAtTime(m ? 0 : this.VOL, this.t(), 0.02);
   },
   t: function () { return this.ctx.currentTime; },
+  on: function () { return !!(this.cap || this.ctx); },
   sizzle: function (level) {
+    if (this.cap) { if (Math.abs(level - this.capSizzle) > 0.01) { this.capSizzle = level; this.cap.push({ name: 'sizzle', args: [level] }); } return; }
     if (!this.ctx) return;
     this.sizzleGain.gain.setTargetAtTime(level * 0.16, this.t(), 0.12);
   },
-  burst: function (opt) { // ノイズバースト汎用
+  burst: function (opt) {
+    opt.off = Math.random(); // ノイズの読み出し位置（記録して書き出し時も同じ音にする）
+    if (this.cap) { this.cap.push({ name: 'burst', args: [opt] }); return; }
     if (!this.ctx) return;
-    var ctx = this.ctx, t0 = this.t() + (opt.delay || 0);
-    var src = ctx.createBufferSource(); src.buffer = this.noise;
-    var f = ctx.createBiquadFilter(); f.type = opt.type || 'bandpass'; f.frequency.setValueAtTime(opt.f0, t0);
-    if (opt.f1) f.frequency.exponentialRampToValueAtTime(opt.f1, t0 + opt.dur);
-    f.Q.value = opt.q || 1;
-    var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(opt.gain, t0 + (opt.attack || 0.005));
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + opt.dur);
-    src.connect(f); f.connect(g); g.connect(this.master);
-    src.start(t0, Math.random()); src.stop(t0 + opt.dur + 0.05);
+    playBurst(this.ctx, this.master, this.noise, opt, this.t());
   },
   tone: function (opt) {
+    if (this.cap) { this.cap.push({ name: 'tone', args: [opt] }); return; }
     if (!this.ctx) return;
-    var ctx = this.ctx, t0 = this.t() + (opt.delay || 0);
-    var o = ctx.createOscillator(); o.type = opt.wave || 'sine';
-    o.frequency.setValueAtTime(opt.f0, t0);
-    if (opt.f1) o.frequency.exponentialRampToValueAtTime(opt.f1, t0 + opt.dur);
-    var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(opt.gain, t0 + (opt.attack || 0.01));
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + opt.dur);
-    o.connect(g); g.connect(this.master); o.start(t0); o.stop(t0 + opt.dur + 0.05);
+    playTone(this.ctx, this.master, opt, this.t());
+  },
+  // 書き出し用：記録した呼び出しを、渡された AudioContext（OfflineAudioContext）の時刻 when に鳴らす
+  render: function (ctx, name, args, when) {
+    var o = ctx.__oko;
+    if (!o) {
+      var m = ctx.createGain(); m.gain.value = this.VOL; m.connect(ctx.destination);
+      var nz = makeNoise(ctx);
+      o = ctx.__oko = { master: m, noise: nz, sizzle: makeSizzle(ctx, nz, m) };
+    }
+    if (name === 'sizzle') o.sizzle.gain.setTargetAtTime(args[0] * 0.16, when, 0.12);
+    else if (name === 'burst') playBurst(ctx, o.master, o.noise, args[0], when);
+    else if (name === 'tone') playTone(ctx, o.master, args[0], when);
   },
   pop: function () { this.burst({ f0: rr(3000, 6000), q: 3, gain: 0.05, dur: 0.03 }); },
   whoosh: function () { this.burst({ f0: 300, f1: 2400, q: 1.2, gain: 0.35, attack: 0.08, dur: 0.38 }); },
@@ -339,7 +371,7 @@ var Sfx = {
     this.tone({ f0: 220, f1: 40, wave: 'triangle', gain: 0.4, dur: 0.4 });
     this.burst({ type: 'highpass', f0: 2500, gain: 0.3, attack: 0.05, dur: 1.6, delay: 0.2 });
   },
-  chime: function () { var n = [784, 988, 1175, 1568]; for (var i = 0; i < 4; i++) this.tone({ f0: n[i], wave: 'triangle', gain: 0.18, dur: 0.5, delay: i * 0.08 }); },
+  chime: function (delay) { var n = [784, 988, 1175, 1568]; for (var i = 0; i < 4; i++) this.tone({ f0: n[i], wave: 'triangle', gain: 0.18, dur: 0.5, delay: (delay || 0) + i * 0.08 }); },
   sad: function () { this.tone({ f0: 523, f1: 494, wave: 'triangle', gain: 0.16, dur: 0.3 }); this.tone({ f0: 440, f1: 392, wave: 'triangle', gain: 0.16, dur: 0.5, delay: 0.28 }); },
   squish: function () { this.burst({ f0: rr(250, 450), f1: rr(600, 900), q: 2, gain: 0.12, dur: 0.12 }); },
   sprinkle: function () { this.burst({ type: 'highpass', f0: 5000, gain: 0.04, dur: 0.05 }); },
@@ -887,12 +919,13 @@ function camView(name) {
 }
 
 // ------------------------------------------------------------------ ゲーム状態
+var events = []; function emit(type, data) { var e = data || {}; e.type = type; events.push(e); } // 告知動画の台本に渡す出来事
 var state = { phase: 'pour', size: null, d: 0, cookT: 0, timeScale: 1, discX: X0, shape: { volume: 0, diameter: 0 } };
 var ui = { panels: ['title', 'pour', 'cook', 'flip', 'result', 'bake', 'finish', 'photo'] };
 function show(name) { ui.panels.forEach(function (p) { $(p).classList.toggle('show', p === name); }); }
 function setPhaseText(t) { $('phase').textContent = t; }
-function toast(text, ms) { var el = $('toast'); el.textContent = text; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove('on'); }, ms || 1100); }
-function flash(a) { var el = $('flash'); el.style.transition = 'none'; el.style.opacity = a; requestAnimationFrame(function () { el.style.transition = 'opacity .5s'; el.style.opacity = 0; }); }
+function toast(text, ms) { var el = $('toast'); el.textContent = text; el.classList.add('on'); toast.until = time + (ms || 1100) / 1000; } // 消す時刻はゲーム内の時間で（update で消す）
+function flash(a) { var el = $('flash'); el.style.transition = 'none'; el.style.opacity = a; void el.offsetWidth; el.style.transition = 'opacity .5s'; el.style.opacity = 0; }
 
 function resetRound() {
   if (disc) { scene.remove(disc.group); disc.geo.dispose(); disc = null; }
@@ -934,7 +967,7 @@ function goTitle() {
   bowl.visible = false; stream.visible = false; ladle.visible = false;
   disc = makeDisc(0.1, 0.016); placePork(disc);
   state.d = 0.62; drawTop(disc, state.d); setSideColor(disc, state.d * 0.85); disc.topMat.roughness = 0.6;
-  Sfx.sizzle(Sfx.ctx ? 0.3 : 0);
+  Sfx.sizzle(Sfx.on() ? 0.3 : 0);
   titleCam(0); camPos.copy(camPosT); camLook.copy(camLookT);
 }
 function titleCam(t) { var a = 0.9 + t * 0.12; camTo(X0 + Math.cos(a) * 0.44, 0.36, Math.sin(a) * 0.44, X0, 0.0, 0.05); }
@@ -1009,6 +1042,7 @@ function startCook() {
   state.size = L.makeSize(state.shape.volume, state.shape.diameter); // 実測の直径・厚み
   syncDiscToShape(); placePork(disc);
   state.phase = 'cook'; state.cookT = 0; state.d = 0; state.cookDur = L.cookTime(state.size); state.phaseT = 0;
+  emit('cook', { diameter: state.size.diameter, thickness: state.size.thickness });
   show('cook'); setPhaseText('豚バラをのせて焼く（直径' + cm(state.size.diameter) + 'cm・厚さ' + cm(state.size.thickness) + 'cm）'); camView('cook');
   Sfx.burst({ type: 'highpass', f0: 2500, gain: 0.3, attack: 0.02, dur: 1.0 });
 }
@@ -1027,19 +1061,23 @@ function decideFlip() {
 var swipe = null;
 function capture(e) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* 合成イベント等 */ } }
 function appXY(e) { var r = app.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-stage.addEventListener('pointerdown', function (e) {
+// 操作の時刻：普段は実時間、告知動画の撮影中（manual）はゲーム内の時間
+function nowMs() { return manual ? time * 1000 : performance.now(); }
+// ポインタ操作の本体（座標は #app 内の px）。告知動画の撮影も同じ関数を通す
+function touchDown(p) {
   Sfx.init();
-  var p = appXY(e);
-  if (state.phase === 'flipReady') { swipe = { pts: [{ x: p.x, y: p.y, t: performance.now() }] }; capture(e); }
-  else if (state.phase === 'pour') { capture(e); spreadStart(p); }
-  else if (state.phase === 'finish') { capture(e); paint.start(p); }
-});
-stage.addEventListener('pointermove', function (e) {
-  var p = appXY(e);
-  if (swipe) { swipe.pts.push({ x: p.x, y: p.y, t: performance.now() }); drawTrail(); }
+  if (state.phase === 'flipReady') { swipe = { pts: [{ x: p.x, y: p.y, t: nowMs() }] }; return true; }
+  if (state.phase === 'pour') { spreadStart(p); return true; }
+  if (state.phase === 'finish') { paint.start(p); return true; }
+  return false;
+}
+function touchMove(p) {
+  if (swipe) { swipe.pts.push({ x: p.x, y: p.y, t: nowMs() }); drawTrail(); }
   else if (state.phase === 'pour' && spreadDrag) spreadMove(p);
   else if (state.phase === 'finish' && paint.down) paint.move(p);
-});
+}
+stage.addEventListener('pointerdown', function (e) { if (touchDown(appXY(e))) capture(e); });
+stage.addEventListener('pointermove', function (e) { touchMove(appXY(e)); });
 function endPointer(e) {
   if (swipe) {
     var pts = swipe.pts; swipe = null;
@@ -1075,7 +1113,7 @@ function doFlick(flick) {
   state.ds.y0 = disc.h / 2;
   state.phase = 'flight'; state.phaseT = 0; state.broken = false; state.messCam = false; state.timeScale = 0.55;
   show(null); setPhaseText('');
-  Sfx.whoosh();
+  Sfx.whoosh(); emit('flick', { tier: lp.judgement.tier });
 }
 
 // ---- 着地
@@ -1084,11 +1122,11 @@ function land() {
   state.phase = 'landed'; state.phaseT = 0; state.timeScale = 1;
   state.discX = state.ds.x;
   state.landRot0 = state.ds.rot;
-  Sfx.thud(L.thicknessNorm(state.size));
+  Sfx.thud(L.thicknessNorm(state.size)); emit('land', { tier: j.tier });
   shake = 0.006 + 0.01 * L.thicknessNorm(state.size);
   for (var i = 0; i < 14; i++) emitSteam(state.discX + rr(-D.R, D.R) * 0.8, D.h, rr(-D.R, D.R) * 0.6, false, true);
   if (j.tier === 'success') {
-    toast('成功！', 1200); setTimeout(function () { Sfx.chime(); }, 150);
+    toast('成功！', 1200); Sfx.chime(0.15);
     state.bounce = state.flipD > 0.85 ? { vy: 0.55 + 0.6 * (state.flipD - 0.85) / 0.15, y: 0, vx: 0.16 } : null; // 焦げは硬く跳ねてずれる
   } else {
     toast('惜しい…', 1200); Sfx.sad();
@@ -1100,7 +1138,7 @@ function land() {
 function explodeNow() {
   state.broken = true; state.brokenT = 0;
   explode(disc, state.ds);
-  Sfx.splat(); flash(0.7); shake = 0.05; toast('大失敗！！', 1600);
+  Sfx.splat(); emit('explode'); flash(0.7); shake = 0.05; toast('大失敗！！', 1600);
   state.hitStop = 0.14;
   camLookT.set(state.ds.x, state.ds.y * 0.8, 0);
 }
@@ -1154,7 +1192,7 @@ function showResult() {
   $('result').classList.toggle('compact', compact);
   if (compact) { document.querySelector('#result .rhead').appendChild($('rScore')); document.querySelector('#result .rrow').appendChild($('rStats')); }
   else { document.querySelector('#result .rrow').appendChild($('rScore')); sheet.insertBefore($('rStats'), $('rBtns')); }
-  show('result');
+  show('result'); emit('result', { tier: j.tier, score: state.score });
 }
 // ---- 完成写真：画面に表示している写真（正方形の中央切り抜き）。共有機能とは無関係（共有なし版と同じ）
 function capturePhotoCanvas() {
@@ -1262,7 +1300,7 @@ $('done').addEventListener('click', function () {
   $('photoCap').innerHTML = '<span class="nw">お好み焼き</span><span class="nw">（直径' + cm(state.size.diameter) + 'cm・</span><span class="nw">厚さ' + cm(state.size.thickness) + 'cm）</span>　<span class="nw">' + state.score + '点</span>' +
     '<small><span class="nw">' + now.getFullYear() + '.' + (now.getMonth() + 1) + '.' + now.getDate() + '</span>　<span class="nw">焼き加減 ' + L.donenessPercent(state.flipD) + '%・' +
     { success: 'きれいに返せた', near: 'ちょっと折れた', collapse: '' }[state.judgement.tier] + '</span></small>';
-  flash(0.9); state.phase = 'photo'; show('photo'); setPhaseText('');
+  flash(0.9); emit('photo', { score: state.score }); state.phase = 'photo'; show('photo'); setPhaseText('');
   camPosT.copy(camPos); camLookT.copy(camLook);
 });
 $('again').addEventListener('click', function () { Sfx.click(); goPour(); });
@@ -1416,6 +1454,7 @@ function update(rdt) {
   }
   if (state.phase === 'finish' && D) { if (rand() < rdt * 3) emitSteam(state.discX + rr(-D.R, D.R) * 0.7, D.h, rr(-D.R, D.R) * 0.5, false, false); }
 
+  if (toast.until && time >= toast.until) { toast.until = 0; $('toast').classList.remove('on'); }
   updateSteam(rdt);
   if (parts.length) updateParts(dt);
   if (flakes.length) updateFlakes(time);
@@ -1433,7 +1472,7 @@ function update(rdt) {
 
 // 描画が重い端末では解像度を自動で下げる（フレーム時間の移動平均で判断）
 var maxPR = Math.min(window.devicePixelRatio || 1, 2), curPR = maxPR, frameAvg = 16, prCooldown = 0;
-var FIXED_PR = /[?&]fixedpr\b/.test(location.search);
+var FIXED_PR = /[?&](fixedpr|promo)\b/.test(location.search);
 function adaptResolution(rawDt) {
   if (FIXED_PR) return;
   frameAvg += (rawDt * 1000 - frameAvg) * 0.1; prCooldown -= rawDt;
@@ -1443,8 +1482,10 @@ function adaptResolution(rawDt) {
   else if (frameAvg < 18 && curPR < maxPR) next = Math.min(maxPR, curPR * 1.15);
   if (next !== curPR) { curPR = next; renderer.setPixelRatio(curPR); renderer.setSize(W, H, false); prCooldown = 1.0; }
 }
+var manual = false; // 告知動画の撮影中は自分では進めず、__game.step(dt) で1コマずつ進める
 function frame() {
   var raw = clock.getDelta();
+  if (manual) { requestAnimationFrame(frame); return; }
   var dt = Math.min(0.05, raw);
   adaptResolution(Math.min(raw, 0.5));
   update(dt);
@@ -1464,6 +1505,34 @@ window.__oko = {
   discCenter: function () { if (!disc) return null; var p = disc.group.getWorldPosition(new THREE.Vector3()).project(camera); return { x: (p.x + 1) / 2 * W, y: (1 - p.y) / 2 * H }; },
   pixelRatio: function () { return renderer.getPixelRatio(); },
   appRect: function () { var r = app.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }
+};
+
+// 告知動画の撮影用の入口（tools/promo/。スキル promo-video の約束に合わせる）。普段の遊びには影響しない
+window.__game = {
+  manual: function (on) { manual = !!on; if (!on) clock.getDelta(); },
+  step: function (dt) { update(dt); if (state.phase !== 'photo') renderer.render(scene, camera); },
+  state: function () {
+    var sh = state.shape;
+    return { phase: state.phase, d: state.d, percent: L.donenessPercent(state.d), flipD: state.flipD, volume: sh.volume, diameter: sh.diameter,
+      thickness: sh.volume > 0 ? L.thicknessFrom(sh.volume, sh.diameter) : 0, tier: state.judgement && state.judgement.tier, score: state.score,
+      disc: disc && disc.group.visible && (state.phase !== 'pour' || sh.volume > 0) ? discScreen() : null, discRot: disc ? disc.group.rotation.z : null };
+  },
+  click: function (id) { $(id).click(); },        // ボタンと同じ処理（startBtn / cookBtn / flipBtn / rBtn / done / again など）
+  pour: function (on) { setPouring(!!on); },
+  newRound: function () { goPour(); },             // 「もう一度焼く」と同じ（どの画面からでも新しく注ぐところから）       // 「生地を落とす」ボタンの長押し
+  touchDown: function (x, y) { touchDown({ x: x, y: y }); },
+  touchMove: function (x, y) { touchMove({ x: x, y: y }); },
+  touchUp: function () { endPointer(); },
+  tool: function (name) { document.querySelector('.tool[data-tool="' + name + '"]').click(); },
+  // 速さ・角度のフリックになる、ms ミリ秒のスワイプの移動量（px）。成功の窓の中心は center
+  swipeFor: function (speed, angle, ms) { return L.swipeForFlick({ speed: speed, angle: angle }, ms, H); },
+  flipWindow: function () { return L.flipWindow(state.size, state.flipD); },
+  drainEvents: function () { var e = events; events = []; return e; },
+  audio: {
+    capture: function (on) { Sfx.cap = on ? [] : null; Sfx.capSizzle = -1; },
+    drain: function () { if (!Sfx.cap) return []; var q = Sfx.cap; Sfx.cap = []; return q; },
+    render: function (ctx, name, args, when) { Sfx.render(ctx, name, args, when); }
+  }
 };
 
 goTitle();

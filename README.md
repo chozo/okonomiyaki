@@ -27,6 +27,7 @@
 - `build.js` — `src/` と Three.js r187 を単一ファイルの `index.html` に組み立て、`dist/okonomiyaki/` に出力する。毎回 `dist/` を空にしてから、`public/` の中身も同じフォルダにコピーする（ファビコンは埋め込まず `./favicon.svg`・`./apple-touch-icon.png` で参照）
 - `dist/okonomiyaki/` — 完成品（ビルドで生成。`index.html` は単一ファイル・9:16。favicon・OGP画像が同じフォルダに並ぶ）。遊ぶときはこの `index.html` を開く。公開時はこのフォルダをそのまま配信する
 - `tools/ogp/make-ogp.mjs` — OGP画像の生成。実際のゲームを Chrome で開き、注いで広げ（540ml→19cm）、こんがりで成功フリック → 宙を舞う瞬間を UI を隠して撮り、0.8倍にしてお好み焼きを右に置き、タイトル・一言・URLを左に重ねる。乱数は固定しているが撮る瞬間がわずかにずれるため、毎回少し違う絵になる
+- `tools/promo/` — 告知動画の撮影と書き出し（スキル promo-video の道具）。台本は `scenario.js`、見た目は `promo.css`、BGM は `make-bgm.mjs` で一から合成（外部音源なし。生成物の `bgm.wav` はリポジトリに含めない）。`record.mjs`・`stage.js` はひな形のまま
 - `tests/logic.test.js` — ロジックの単体テスト（23件）
 - `tests/screens.js` — Playwrightで通しプレイ＋画面レイアウト確認（後述の注意あり）
 - `diag/check.js` — 起動スモークチェック（phaseとJSエラーの有無を見る）
@@ -38,11 +39,21 @@
 npm install                      # 初回だけ：three@0.187.0・playwright-core・wrangler を app/node_modules へ
 npm run build                    # = node build.js：dist/okonomiyaki/ を作り直す
 npm run ogp                      # public/ogp.png を作り直す（先に build）
+npm run promo                    # 告知動画を作る（ビルド → BGM 合成 → 撮影 → 書き出し。数分）
+PROMO_EVERY=15 npm run promo     # 確認用：15コマおきの一覧画像だけ作る（構成の確認に）
+PROMO_ENCODE_ONLY=1 npm run promo  # 撮り直さず、音（BGM の音量など）だけ書き出し直す
 npm test                         # = node tests/logic.test.js：23件、全通過が正常
 npm run check                    # 起動確認（phase: title / errors: none）
 ```
 
 依存はすべて `app/package.json` の devDependencies（Three.js は r187 に固定）。ブラウザでの確認（`check`・`ogp`・`tests/screens.js`）は playwright-core でインストール済みの Google Chrome（`channel: 'chrome'`）を使う。
+
+### 告知動画
+
+- 出力先：アプリの隣の `../video/`（リポジトリに含めない）。`okonomiyaki-promo.mp4`（縦 1080×1920・30fps・約29秒・-14 LUFS）、`okonomiyaki-promo-cover.jpg`（表紙：具材が飛び散る瞬間）、`okonomiyaki-promo-sheet.jpg`（2秒おきの確認用一覧）。途中ファイルは `../video/work/`
+- 構成：大失敗で具材が飛び散る（スロー）→ タイトル → 惜しい失敗（端が折れる）→ 注ぐ → 広げる → 焼く（×4 早送り）→ フリックで成功 → 点数 → ソース・マヨ・青のり・かつお節 → 完成写真 → エンドカード（URL）
+- ゲーム側の入口は `window.__game`（`src/game.html` の末尾）。`manual`/`step` で1コマずつ進め、効果音は `audio.capture` で記録して OfflineAudioContext で鳴らし直す。撮影のため、トースト表示の消去・フラッシュ・成功のチャイムの遅れ・フリックの時刻はゲーム内の時間で扱う（普段の遊びは変わらない）。`?promo=1` のときは解像度を固定する
+- BGM は効果音より約14dB小さく（`config.music.volume: 0.22`）
 
 ## 公開
 
@@ -70,6 +81,7 @@ npm run check                    # 起動確認（phase: title / errors: none）
 
 - **JS文字列の中に `<a href=` を書かないこと**。Museアプリの添付プレビューが真っ黒になる（2026-11-20に切り分けで実証済み。ファイルサイズや外部URL文字列は無実）。リンクを作るときは `createElement('a')` を使う
 - 配信は単一ファイルが前提。外部フォント・外部ライブラリを足さない。例外はファビコン（`public/`）だけで、無くてもゲームは動く。ビルドで `dist/okonomiyaki/` に並べるので、そこの `index.html` を開けばファビコンも出る
+- `window.__game` は告知動画の撮影用（`tools/promo/` が使うので消さない）。乱数は `rand()` が呼ぶたびに `Math.random` を参照するようにしてある（撮影で固定するため）
 - `window.__oko` にテスト用フックがある（`phase`、`info()`、`discCenter()`、`audio()`（消音状態）など。起動直後の phase は `title`）。`tests/screens.js` と `diag/check.js` が使うので消さない
 - **`tests/screens.js` は古い**：撤去済みのX投稿ボタンのチェック（共有チェック22件）が残っており、今の `index.html` に対して実行するとその部分だけ失敗する。使う前に共有チェックを除去すること
 
@@ -82,6 +94,7 @@ npm run check                    # 起動確認（phase: title / errors: none）
 - 同日 v10：焼き色を薄く＋焦げ減点（ユーザー要望。v11 の減点方式に置き換え）
 - 2026-11-21 v11：タイトル画面を追加。完成写真の画面と大失敗時の採点画面に「タイトルへ」ボタン（ユーザー要望。成功・惜しいときの採点画面には出さない）。焼き加減の％表示を最適＝100%に。ファビコン・OGP画像・消音ボタンを追加。大失敗の採点画面で具材が見えるようシートを縮小。成功・惜しいの採点画面に着地したお好み焼きを映す。採点を100点満点の減点方式に変更。**現在はこの状態**
 - 2026-11-21 GitHub（chozo/okonomiyaki）と Cloudflare（https://game.chozo.net/okonomiyaki/）に初公開。公開URLでの起動・ファビコン・OGP画像の取得を確認
+- 2026-11-21 告知動画（`npm run promo`、約29秒の縦型）を作成。撮影用の入口 `window.__game` を追加し、効果音の部品をどの AudioContext でも鳴らせる形に整理
 - ユーザーの試遊評価：「かなりいい！」（2026-11-20）
 
 ## 未確認・残っていること
