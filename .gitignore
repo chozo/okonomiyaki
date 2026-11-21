@@ -3,3 +3,4 @@ dist/
 .wrangler/
 .DS_Store
 tools/promo/bgm.wav
+tests/screenshots/

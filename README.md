@@ -29,7 +29,7 @@
 - `tools/ogp/make-ogp.mjs` — OGP画像の生成。実際のゲームを Chrome で開き、注いで広げ（540ml→19cm）、こんがりで成功フリック → 宙を舞う瞬間を UI を隠して撮り、0.8倍にしてお好み焼きを右に置き、タイトル・一言・URLを左に重ねる。乱数は固定しているが撮る瞬間がわずかにずれるため、毎回少し違う絵になる
 - `tools/promo/` — 告知動画の撮影と書き出し（スキル promo-video の道具）。台本は `scenario.js`、見た目は `promo.css`、BGM は `make-bgm.mjs` で一から合成（外部音源なし。生成物の `bgm.wav` はリポジトリに含めない）。`record.mjs`・`stage.js` はひな形のまま
 - `tests/logic.test.js` — ロジックの単体テスト（23件）
-- `tests/screens.js` — Playwrightで通しプレイ＋画面レイアウト確認（後述の注意あり）
+- `tests/screens.js` — 実際のクリック・スワイプで成功／大失敗／惜しいの3ルートを通しで遊び、各場面を撮って文字レイアウト（はみ出し・重なり）を検査する。あわせて「タイトルへ」の出し分け、採点の内訳の合計、消音ボタン、完成写真の並び、X共有が残っていないことを確認する（12項目）。撮った画像は `tests/screenshots/`（リポジトリに含めない）
 - `diag/check.js` — 起動スモークチェック（phaseとJSエラーの有無を見る）
 - `SPEC.md` — 当初の仕様メモ
 
@@ -44,6 +44,7 @@ PROMO_EVERY=15 npm run promo     # 確認用：15コマおきの一覧画像だ�
 PROMO_ENCODE_ONLY=1 npm run promo  # 撮り直さず、音（BGM の音量など）だけ書き出し直す
 npm test                         # = node tests/logic.test.js：23件、全通過が正常
 npm run check                    # 起動確認（phase: title / errors: none）
+node tests/screens.js            # 通しプレイと画面確認（数分。最後に SCREENS OK が正常）
 ```
 
 依存はすべて `app/package.json` の devDependencies（Three.js は r187 に固定）。ブラウザでの確認（`check`・`ogp`・`tests/screens.js`）は playwright-core でインストール済みの Google Chrome（`channel: 'chrome'`）を使う。
@@ -83,7 +84,6 @@ npm run check                    # 起動確認（phase: title / errors: none）
 - 配信は単一ファイルが前提。外部フォント・外部ライブラリを足さない。例外はファビコン（`public/`）だけで、無くてもゲームは動く。ビルドで `dist/okonomiyaki/` に並べるので、そこの `index.html` を開けばファビコンも出る
 - `window.__game` は告知動画の撮影用（`tools/promo/` が使うので消さない）。乱数は `rand()` が呼ぶたびに `Math.random` を参照するようにしてある（撮影で固定するため）
 - `window.__oko` にテスト用フックがある（`phase`、`info()`、`discCenter()`、`audio()`（消音状態）など。起動直後の phase は `title`）。`tests/screens.js` と `diag/check.js` が使うので消さない
-- **`tests/screens.js` は古い**：撤去済みのX投稿ボタンのチェック（共有チェック22件）が残っており、今の `index.html` に対して実行するとその部分だけ失敗する。使う前に共有チェックを除去すること
 
 ## 状態と履歴
 
@@ -96,6 +96,7 @@ npm run check                    # 起動確認（phase: title / errors: none）
 - 2026-11-21 GitHub（chozo/okonomiyaki）と Cloudflare（https://game.chozo.net/okonomiyaki/）に初公開。公開URLでの起動・ファビコン・OGP画像の取得を確認
 - 2026-11-21 告知動画（`npm run promo`、約29秒の縦型）を作成。撮影用の入口 `window.__game` を追加し、効果音の部品をどの AudioContext でも鳴らせる形に整理
 - 2026-11-21 スマホ実機で公開版を確認し、問題なし（ユーザー）
+- 2026-11-21 `tests/screens.js` を今の仕様に合わせて更新（撤去済みのX共有のチェックを外し、タイトルへ・採点の内訳・消音の確認を追加）。SCREENS OK
 - ユーザーの試遊評価：「かなりいい！」（2026-11-20）
 
 ## 未確認・残っていること

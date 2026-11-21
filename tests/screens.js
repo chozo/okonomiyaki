@@ -1,5 +1,6 @@
 // 画面確認：実際のクリック・スワイプ・ドラッグで遊び、各場面のスクリーンショットを撮る。
-// 実行: node tests/screens.js   （../tools の Playwright を使用）
+// 実行: node tests/screens.js   （先に npm run build。playwright-core とインストール済み Chrome を使用）
+// 出力: tests/screenshots/*.png（リポジトリに含めない）
 const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright-core');
@@ -16,18 +17,6 @@ async function newPage(browser) {
   const page = await browser.newPage({ viewport: { width: 390, height: 693 }, deviceScaleFactor: 1 });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
-  // 共有APIへの接触を数えるスパイ（ページのスクリプトより先に仕込む）
-  await page.addInitScript(() => {
-    const hits = window.__shareHits = [];
-    const spy = (obj, key, label) => {
-      const d = Object.getOwnPropertyDescriptor(obj, key); if (!d) return;
-      Object.defineProperty(obj, key, { configurable: true, get() { hits.push(label + '@' + (window.__oko ? window.__oko.phase : 'load')); return d.get ? d.get.call(this) : d.value; }, set(v) { Object.defineProperty(obj, key, { value: v, configurable: true, writable: true }); } });
-    };
-    spy(Navigator.prototype, 'share', 'navigator.share'); spy(Navigator.prototype, 'canShare', 'navigator.canShare');
-    spy(window, 'File', 'File');
-    const tb = HTMLCanvasElement.prototype.toBlob; HTMLCanvasElement.prototype.toBlob = function () { hits.push('toBlob@' + (window.__oko ? window.__oko.phase : 'load')); return tb.apply(this, arguments); };
-    const wo = window.open; window.open = function () { hits.push('open@' + (window.__oko ? window.__oko.phase : 'load')); return wo.apply(this, arguments); };
-  });
   await page.goto(URL);
   await page.waitForFunction(() => window.__oko && window.__oko.phase === 'title');
   await page.click('#startBtn', { force: true }); // 脈動アニメーションがあるので force
@@ -61,14 +50,16 @@ async function checkLayout(page, name) {
         const cy = (q0.top + q0.bottom) / 2, hh = Math.min(q0.height, fs) / 2;
         const q = { left: q0.left, right: q0.right, top: cy - hh, bottom: cy + hh };
         const t = n.textContent.trim().slice(0, 14), who = label(n.parentElement) + ' "' + t + '"';
-        texts.push({ q, who, node: n });
+        texts.push({ q, who, node: n, tilted: !!n.parentElement.closest('.logo') });
         const tol = 1;
         if (q.left < app.left - tol || q.right > app.right + tol || q.top < app.top - tol || q.bottom > app.bottom + tol) out.push('off-screen: ' + who);
         if (box) { const b = box.getBoundingClientRect(); if (q.left < b.left - tol || q.right > b.right + tol || q.top < b.top - tol || q.bottom > b.bottom + tol) out.push('outside ' + label(box) + ': ' + who); }
       }
     }
     // 文字どうしの重なり（2px 以上食い込んだら NG）
+    // タイトルのロゴ（.logo）は意図して -3° 傾けており、傾いた字の外接矩形どうしが隣の字と重なるので重なり判定から外す（画面外の判定はする）
     for (let i = 0; i < texts.length; i++) for (let k = i + 1; k < texts.length; k++) {
+      if (texts[i].tilted && texts[k].tilted) continue;
       const a = texts[i].q, b = texts[k].q;
       const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left), oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
       if (ox > 2 && oy > 2) out.push('overlap: ' + texts[i].who + ' × ' + texts[k].who);
@@ -86,6 +77,7 @@ async function checkLayout(page, name) {
     }
     for (const el of document.querySelectorAll('#ui *')) {
       if (!visible(el) || el.tagName === 'svg' || el.closest('svg')) continue;
+      if (el.id === 'title' && el.scrollWidth - el.clientWidth <= 4) continue; // 傾けたロゴの外接矩形ぶん（数px）だけ広がる。字が画面外に出ていないことは上で確認済み
       if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0 && getComputedStyle(el).display !== 'inline') out.push('scroll-overflow: ' + label(el) + ' ' + el.scrollWidth + '>' + el.clientWidth);
     }
     return { issues: out, nText: texts.length };
@@ -172,92 +164,32 @@ const report = async (page, label, intended) => {
   return i;
 };
 
-// ---- Xに投稿のブラウザ内テスト（実投稿はしない）
-const shareChecks = [];
-const check = (name, ok, detail) => { shareChecks.push({ name, ok }); log(`  ${ok ? 'PASS' : 'FAIL'} ${name}${detail ? '  ' + detail : ''}`); };
-// (a) 共有用 blob が PNG として得られ、中身が空でなく、表示中の写真と同じ画像か
-async function checkShareBlob(page, label, imgSel) {
-  const r = await page.evaluate(async (imgSel) => {
-    await window.__oko.lastShare();
-    const b = window.__oko.lastShareBlob();
-    if (!b) return null;
-    const head = [...new Uint8Array(await b.slice(0, 8).arrayBuffer())];
-    const bmp = await createImageBitmap(b);
-    const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
-    const d = g.getImageData(0, 0, bmp.width, bmp.height).data; let mn = 255, mx = 0, cols = new Set();
-    for (let i = 0; i < d.length; i += 4 * 97) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; mn = Math.min(mn, l); mx = Math.max(mx, l); cols.add(d[i] >> 4 << 8 | d[i + 1] >> 4 << 4 | d[i + 2] >> 4); }
-    let same = null;
-    if (imgSel) { // 表示中の <img> を同サイズで描いて画素比較
-      const img = document.querySelector(imgSel); await img.decode();
-      const c2 = new OffscreenCanvas(bmp.width, bmp.height), g2 = c2.getContext('2d'); g2.drawImage(img, 0, 0);
-      const d2 = g2.getImageData(0, 0, bmp.width, bmp.height).data; let diff = 0;
-      for (let i = 0; i < d.length; i++) diff = Math.max(diff, Math.abs(d[i] - d2[i]));
-      same = { natural: img.naturalWidth + 'x' + img.naturalHeight, maxDiff: diff };
-    }
-    return { type: b.type, size: b.size, png: head.join(',') === '137,80,78,71,13,10,26,10', w: bmp.width, h: bmp.height, lumRange: mx - mn, colors: cols.size, same, text: window.__oko.shareText() };
-  }, imgSel);
-  check(`${label}: blob が得られる (image/png, PNG署名)`, !!r && r.type === 'image/png' && r.png && r.size > 10000, r && `${r.size} bytes ${r.w}x${r.h}`);
-  check(`${label}: 画像は正方形で中身がある（単色でない）`, !!r && r.w === r.h && r.lumRange > 60 && r.colors > 30, r && `輝度幅 ${r.lumRange.toFixed(0)} 色数 ${r.colors}`);
-  if (imgSel) check(`${label}: 共有画像＝画面に表示中の写真（画素一致）`, !!r && r.same.maxDiff === 0 && r.same.natural === r.w + 'x' + r.h, r && JSON.stringify(r.same));
-  return r;
+// ---- 画面のふるまいの確認（成否を集計する）
+const checks = [];
+const check = (name, ok, detail) => { checks.push({ name, ok }); log(`  ${ok ? 'PASS' : 'FAIL'} ${name}${detail ? '  ' + detail : ''}`); };
+const shown = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); if (!e) return false; for (let x = e; x && x !== document.body; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden') return false; } return true; }, sel);
+// 採点の内訳（100点から引く）の合計が表示中の点数と一致するか
+async function checkBreakdown(page, label) {
+  const i = await page.evaluate(() => window.__oko.info()), b = i.breakdown;
+  const want = i.judgement.tier === 'collapse' ? 0 : Math.max(0, 100 - b.flick - b.doneness - b.thin);
+  const shownScore = await page.evaluate(() => parseInt(document.querySelector('#rScore .sc').textContent, 10));
+  check(`${label}: 点数＝100−減点の合計（${i.score}点）`, i.score === want && shownScore === i.score, JSON.stringify(b));
 }
-// (b) navigator.share が無い環境：実マウスでボタンを押し、ダウンロード＋インテントURLが開くか
-async function checkFallback(page, btnSel, label, expectText) {
-  await page.evaluate(() => {
-    Object.defineProperty(Navigator.prototype, 'share', { value: undefined, configurable: true });
-    Object.defineProperty(Navigator.prototype, 'canShare', { value: undefined, configurable: true });
-    window.__opened = []; window.open = (u, t, f) => { window.__opened.push({ u, t, f }); return null; };
-  });
-  const b = await page.locator(btnSel).boundingBox();
-  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10000 }), page.mouse.click(b.x + b.width / 2, b.y + b.height / 2)]);
-  const file = path.join(OUT, 'shared_image_' + ({ '完成写真': 'photo', '大失敗': 'collapse' }[label] || 'x') + '.png'); // 実際にダウンロードされた共有画像を保存（目視確認用）
-  await dl.saveAs(file);
-  const head = fs.readFileSync(file).subarray(0, 8).toString('hex');
-  const res = await page.evaluate(async () => ({ r: await window.__oko.lastShare(), opened: window.__opened }));
-  const u = res.opened[0] && new (require("url").URL)(res.opened[0].u);
-  check(`${label}: share 無し → フォールバック`, res.r && res.r.mode === 'fallback' && res.r.reason === 'no-share', JSON.stringify(res.r && { mode: res.r.mode, reason: res.r.reason }));
-  check(`${label}: PNG がダウンロードされる`, dl.suggestedFilename() === 'okonomiyaki.png' && head === '89504e470d0a1a0a', `${dl.suggestedFilename()} ${fs.statSync(file).size} bytes`);
-  check(`${label}: インテントURLが1回開く（文面入り）`, res.opened.length === 1 && u.origin + u.pathname === 'https://twitter.com/intent/tweet' && u.searchParams.get('text') === expectText, u && decodeURIComponent(u.search));
-}
-// 共有ボタンを押す前に共有API（navigator.share/canShare, File, toBlob, window.open）に誰も触れていないこと
-async function checkNoShareTouch(page, label) {
-  const h = await page.evaluate(() => window.__shareHits.slice());
-  check(`${label}: クリック前は共有APIに一度も触れていない`, h.length === 0, h.length ? JSON.stringify(h) : 'hits=0');
-}
-// 共有処理が例外を出す環境：ボタンが無効化されるだけで、ゲームは続行できる
-async function checkFailureDisables(page, btnSel, label) {
-  await page.evaluate(() => {
-    Object.defineProperty(Navigator.prototype, 'share', { value: async () => {}, configurable: true, writable: true });
-    Object.defineProperty(Navigator.prototype, 'canShare', { value: () => { throw new Error('boom'); }, configurable: true, writable: true });
-  });
-  await page.click(btnSel);
-  const r = await page.evaluate(async (sel) => ({ r: await window.__oko.lastShare(), disabled: document.querySelector(sel).disabled }), btnSel);
-  check(`${label}: 共有が例外 → ボタン無効化のみ（JSエラーにしない）`, r.r && r.r.mode === 'disabled' && r.disabled === true, JSON.stringify(r));
-}
-// navigator.share がある環境（モック）：画像ファイル＋文面が渡るか
-async function checkWebShareMock(page, btnSel, label, expectText) {
-  await page.evaluate(() => {
-    window.__shared = null; window.__opened = [];
-    Object.defineProperty(Navigator.prototype, 'canShare', { value: function (d) { return !!(d && d.files && d.files.every(f => f instanceof File)); }, configurable: true });
-    Object.defineProperty(Navigator.prototype, 'share', { value: async function (d) { window.__shared = { text: d.text, files: d.files.map(f => ({ name: f.name, type: f.type, size: f.size })) }; }, configurable: true });
-  });
-  await page.click(btnSel);
-  const res = await page.evaluate(async () => ({ r: await window.__oko.lastShare(), shared: window.__shared, opened: window.__opened.length, blobSize: window.__oko.lastShareBlob().size }));
-  const f = res.shared && res.shared.files[0];
-  check(`${label}: share あり（モック）→ 画像ファイル＋文面で共有、フォールバックしない`,
-    res.r.mode === 'shared' && res.opened === 0 && f && f.name === 'okonomiyaki.png' && f.type === 'image/png' && f.size === res.blobSize && res.shared.text === expectText,
-    JSON.stringify(res.shared));
+// X 共有は撤去済み（2026-11-20）。共有ボタンや共有APIの呼び出しが残っていないこと
+async function checkNoShare(page, label) {
+  const r = await page.evaluate(() => ({ btn: !!document.querySelector('#pShare, #rShare, [data-share]'), fn: typeof (window.__oko && window.__oko.shareText) }));
+  check(`${label}: X 共有のボタン・関数が無い`, !r.btn && r.fn === 'undefined', JSON.stringify(r));
 }
 
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const results = {};
 
-  // ---- 1. 成功ルート（中サイズ）：サイズ選択 → 焼き中 → 空中 → 着地 → 仕上げ → 完成写真
+  // ---- 1. 成功ルート（中サイズ）：注いで広げる → 焼き中 → 空中 → 着地 → 仕上げ → 完成写真
   log('Run 1: 成功（540ml を直径19cmへ）');
   let page = await newPage(browser);
   await shot(page, '00_pour_empty');
-  await checkNoShareTouch(page, '読み込み→生地フェーズ');
+  await checkNoShare(page, '生地フェーズ');
   await prepare(page, 540, 19, '01');
   await cookTo(page, 0.45);
   await shot(page, '02_cooking');
@@ -269,6 +201,8 @@ async function checkWebShareMock(page, btnSel, label, expectText) {
   await waitFor(page, () => window.__oko.phase === 'result');
   results.success = await report(page, '成功ルート', f.intended);
   await shot(page, '04_result_success');
+  await checkBreakdown(page, '成功');
+  check('成功: 採点画面に「タイトルへ」を出さない（裏面へ続く）', !(await shown(page, '#rToTitle')));
   await page.click('#rBtn');
   await waitFor(page, () => window.__oko.phase === 'bake');
   await sleep(700);
@@ -292,7 +226,6 @@ async function checkWebShareMock(page, btnSel, label, expectText) {
   await sleep(300);
   await shot(page, '06_finish_decorated');
   const fl1 = (await page.evaluate(() => window.__oko.info())).flakes;
-  const sum1 = await page.evaluate(() => { const c = document.getElementById('stage'); return c.toDataURL().length; });
   await sleep(400);
   await shot(page, '06b_finish_katsuo_dance');
   log('  鰹節の枚数', fl1);
@@ -300,23 +233,19 @@ async function checkWebShareMock(page, btnSel, label, expectText) {
   await sleep(900);
   await shot(page, '07_photo');
   {
-    const g = await page.evaluate(() => { const q = s => document.querySelector(s).getBoundingClientRect(); const p = q('.polaroid'), x = q('#pShare'), m = q('#pMsg'), a = q('#again'); return { pBottom: p.bottom, xTop: x.top, xBottom: x.bottom, mTop: m.top, mBottom: m.bottom, aTop: a.top }; });
-    check('完成写真(07): Xボタン・案内・もう一度が写真と重ならず縦に並ぶ', g.pBottom <= g.xTop && g.xBottom <= g.mTop && g.mBottom <= g.aTop, JSON.stringify(g));
-  }
-  {
-    await checkNoShareTouch(page, '読み込み→生地→…→完成写真');
-    const i = await page.evaluate(() => window.__oko.info());
-    const want = `直径${(i.size.diameter * 100).toFixed(1)}cm・厚さ${(i.size.thickness * 100).toFixed(1)}cmのお好み焼き、ひっくり返し成功！ スコア${i.score} #お好み焼きひっくり返せ`;
-    await checkWebShareMock(page, '#pShare', '完成写真', want);
-    const r = await checkShareBlob(page, '完成写真', '#photoImg');
-    check('完成写真: 投稿文が結果どおり（成功版）', r.text === want, r.text);
-    await checkFallback(page, '#pShare', '完成写真', want);
-    await sleep(300);
-    await shot(page, '07b_photo_share_fallback');
-    for (const nm of ['07b']) {
-      const g = await page.evaluate(() => { const q = s => document.querySelector(s).getBoundingClientRect(); const p = q('.polaroid'), x = q('#pShare'), m = q('#pMsg'), a = q('#again'); return { pBottom: p.bottom, xTop: x.top, xBottom: x.bottom, mTop: m.top, mBottom: m.bottom, aTop: a.top }; });
-      check(`完成写真(${nm}): Xボタン・案内・もう一度が写真と重ならず縦に並ぶ`, g.pBottom <= g.xTop && g.xBottom <= g.mTop && g.mBottom <= g.aTop, JSON.stringify(g));
-    }
+    const g = await page.evaluate(() => { const q = s => document.querySelector(s).getBoundingClientRect(); const p = q('.polaroid'), a = q('#again'), t = q('#pToTitle'); return { pBottom: p.bottom, aTop: a.top, aBottom: a.bottom, tTop: t.top }; });
+    check('完成写真: 写真・もう一度焼く・タイトルへが重ならず縦に並ぶ', g.pBottom <= g.aTop && g.aBottom <= g.tTop, JSON.stringify(g));
+    // 消音ボタン：押すと master の音量が 0 になり、もう一度押すと戻る
+    await page.click('#muteBtn');
+    const m1 = await page.evaluate(() => window.__oko.audio());
+    await page.click('#muteBtn');
+    const m2 = await page.evaluate(() => window.__oko.audio());
+    check('消音ボタン: 消音↔音ありが切り替わる', m1.muted === true && m2.muted === false, JSON.stringify({ m1, m2 }));
+    await page.click('#pToTitle');
+    await waitFor(page, () => window.__oko.phase === 'title', null, 10000);
+    await sleep(500);
+    await shot(page, '07c_back_to_title');
+    check('完成写真: 「タイトルへ」でタイトル画面に戻る', true);
   }
   await page.close();
 
@@ -338,18 +267,12 @@ async function checkWebShareMock(page, btnSel, label, expectText) {
   results.collapse = await report(page, '大失敗ルート', f.intended);
   await shot(page, '10_result_collapse');
   {
-    await checkNoShareTouch(page, '大失敗の結果画面');
-    await checkFallback(page, '#rShare', '大失敗', await page.evaluate(() => window.__oko.shareText()));
-    const r = await checkShareBlob(page, '大失敗', null);
-    const i = results.collapse;
-    check('大失敗: 投稿文がぶちまけ版', /ぶちまけ/.test(r.text) && !/成功/.test(r.text) && r.text.includes(`直径${(i.size.diameter * 100).toFixed(1)}cm`) && r.text.endsWith(`スコア${i.score} #お好み焼きひっくり返せ`), r.text);
-    await sleep(300);
-    await shot(page, '10b_result_collapse_share_fallback');
-    await checkFailureDisables(page, '#rShare', '大失敗');
-    await shot(page, '10c_result_collapse_share_disabled');
+    await checkBreakdown(page, '大失敗');
+    check('大失敗: 採点画面に「タイトルへ」を出す', await shown(page, '#rToTitle'));
+    check('大失敗: 結果シートが小さい（compact）', await page.evaluate(() => document.getElementById('result').classList.contains('compact')));
     await page.click('#rBtn');
     await waitFor(page, () => window.__oko.phase === 'pour', null, 10000);
-    check('大失敗: 共有を無効化した後も「もう一度」で生地フェーズへ進める', true);
+    check('大失敗: 「もう一度」で生地フェーズへ進める', true);
   }
   await page.close();
 
@@ -365,16 +288,17 @@ async function checkWebShareMock(page, btnSel, label, expectText) {
   await waitFor(page, () => window.__oko.phase === 'result');
   results.near = await report(page, '惜しいルート', f.intended);
   await shot(page, '12_result_near');
-  check('惜しい: 結果シートにはXボタンを出さない（完成写真で投稿）', await page.evaluate(() => getComputedStyle(document.getElementById('rShare')).display === 'none'));
+  await checkBreakdown(page, '惜しい');
+  check('惜しい: 採点画面に「タイトルへ」を出さない（裏面へ続く）', !(await shown(page, '#rToTitle')));
   await page.close();
 
   await browser.close();
   log('\nJS errors:', errors.length ? errors : 'none');
   const expect = { success: 'success', collapse: 'collapse', near: 'near' };
   log('Layout issues:', layoutIssues.length ? layoutIssues : 'none');
-  const shareFail = shareChecks.filter(c => !c.ok);
-  log(`Share checks: ${shareChecks.length - shareFail.length}/${shareChecks.length} pass`, shareFail.length ? shareFail.map(c => c.name) : '');
-  let ok = errors.length === 0 && layoutIssues.length === 0 && shareFail.length === 0;
+  const failed = checks.filter(c => !c.ok);
+  log(`Checks: ${checks.length - failed.length}/${checks.length} pass`, failed.length ? failed.map(c => c.name) : '');
+  let ok = errors.length === 0 && layoutIssues.length === 0 && failed.length === 0;
   for (const k in expect) if (results[k].judgement.tier !== expect[k]) { ok = false; log('UNEXPECTED tier for', k, results[k].judgement.tier); }
   log(ok ? 'SCREENS OK' : 'SCREENS FAILED');
   process.exit(ok ? 0 : 1);
